@@ -1,6 +1,7 @@
 #include "websocket.hpp"
 #include "../websocket.hpp"
 #include "../logging.hpp"
+#include "../hardware/sensor.hpp"
 #include <nlohmann/json.hpp>
 #include <thread>
 #include <chrono>
@@ -25,15 +26,28 @@ void WebSocketRoutes::handleSensorStream(std::shared_ptr<WebSocketSession> sessi
     // Subscribe to sensor updates
     WebSocketRoutes::subscribeToSensors(session);
     
-    // Send initial sensor data
+    // Get real sensor data
+    auto& sensorReader = hardware::SensorReader::getInstance();
+    
+    // Send initial sensor data with real readings
     json initialData;
     initialData["type"] = "sensor_data";
-    initialData["sensors"]["cpu_temp"]["value"] = 45.0;
+    initialData["sensors"]["cpu_temp"]["value"] = sensorReader.getCpuTemperature();
     initialData["sensors"]["cpu_temp"]["unit"] = "C";
-    initialData["sensors"]["memory_usage"]["value"] = 512.0;
-    initialData["sensors"]["memory_usage"]["unit"] = "MB";
-    initialData["sensors"]["power"]["value"] = 12.5;
+    initialData["sensors"]["gpu_temp"]["value"] = sensorReader.getGpuTemperature();
+    initialData["sensors"]["gpu_temp"]["unit"] = "C";
+    initialData["sensors"]["pmic_temp"]["value"] = sensorReader.getPmicTemperature();
+    initialData["sensors"]["pmic_temp"]["unit"] = "C";
+    initialData["sensors"]["thermal_temp"]["value"] = sensorReader.getThermalTemperature();
+    initialData["sensors"]["thermal_temp"]["unit"] = "C";
+    initialData["sensors"]["power"]["value"] = sensorReader.getTotalPower();
     initialData["sensors"]["power"]["unit"] = "W";
+    initialData["sensors"]["cpu_power"]["value"] = sensorReader.getCpuPower();
+    initialData["sensors"]["cpu_power"]["unit"] = "W";
+    initialData["sensors"]["gpu_power"]["value"] = sensorReader.getGpuPower();
+    initialData["sensors"]["gpu_power"]["unit"] = "W";
+    initialData["sensors"]["ddr_power"]["value"] = sensorReader.getDdrPower();
+    initialData["sensors"]["ddr_power"]["unit"] = "W";
     
     session->send(initialData.dump());
     
