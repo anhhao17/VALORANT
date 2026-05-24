@@ -9,6 +9,7 @@ import json
 import sys
 import time
 from typing import Dict, Any, Optional
+from test_auth import AuthTester, run_auth_tests
 
 # Configuration
 HOST = "localhost"
@@ -144,140 +145,55 @@ def main():
     
     print()
     
-    # Test new authentication endpoints
-    print("Testing new authentication endpoints...")
+    # Test authentication using reusable module
+    print("Testing authentication endpoints...")
+    auth_results = run_auth_tests(BASE_URL)
     
-    # Test login with valid credentials
-    login_response = test_endpoint(
-        "Login with valid credentials",
-        "/api/login",
-        200,
-        use_auth=False,
-        method="POST",
-        data={"username": "admin", "password": "password"}
-    )
+    for test_name, passed in auth_results.items():
+        status = "PASS" if passed else "FAIL"
+        print_result(f"Auth: {test_name}", status)
     
-    session_token = None
-    csrf_token = None
+    print()
+    print("Testing system endpoints with authentication...")
     
-    if login_response and "sessionToken" in login_response:
-        session_token = login_response["sessionToken"]
-        csrf_token = login_response.get("csrfToken", "")
-        print_result("Login response contains sessionToken", "PASS")
+    # Test system endpoints using AuthTester
+    auth = AuthTester(BASE_URL)
+    login_success, _ = auth.login()
+    
+    if login_success:
+        # Test authenticated system endpoints
+        success, data = auth.make_authenticated_request("GET", "/api/system/info")
+        print_result("System info with auth", "PASS" if success else "FAIL")
+        
+        success, data = auth.make_authenticated_request("GET", "/api/system/status")
+        print_result("System status with auth", "PASS" if success else "FAIL")
+        
+        success, data = auth.make_authenticated_request("POST", "/api/system/reboot")
+        print_result("System reboot with auth", "PASS" if success else "FAIL")
+        
+        auth.logout()
     else:
-        print_result("Login response contains sessionToken", "FAIL")
-    
-    # Test login with invalid credentials
-    test_endpoint(
-        "Login with invalid credentials",
-        "/api/login",
-        401,
-        use_auth=False,
-        method="POST",
-        data={"username": "admin", "password": "wrongpassword"}
-    )
-    
-    # Test session info with valid token
-    if session_token:
-        headers = {"Authorization": f"Token {session_token}"}
-        try:
-            response = requests.get(f"{BASE_URL}/api/session", headers=headers)
-            if response.status_code == 200:
-                print_result("Get session info with valid token", "PASS")
-            else:
-                print_result("Get session info with valid token", "FAIL", f"HTTP {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print_result("Get session info with valid token", "FAIL", str(e))
-    
-    # Test logout with valid token
-    if session_token:
-        headers = {"Authorization": f"Token {session_token}"}
-        try:
-            response = requests.post(f"{BASE_URL}/api/logout", headers=headers)
-            if response.status_code == 200:
-                print_result("Logout with valid token", "PASS")
-            else:
-                print_result("Logout with valid token", "FAIL", f"HTTP {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print_result("Logout with valid token", "FAIL", str(e))
-    
-    # Test session info after logout (should fail)
-    if session_token:
-        headers = {"Authorization": f"Token {session_token}"}
-        try:
-            response = requests.get(f"{BASE_URL}/api/session", headers=headers)
-            if response.status_code == 401:
-                print_result("Session info after logout (should fail)", "PASS")
-            else:
-                print_result("Session info after logout (should fail)", "FAIL", f"Expected 401, got {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print_result("Session info after logout (should fail)", "FAIL", str(e))
-    
-    # Test CSRF protection (POST without CSRF token should fail)
-    if session_token and csrf_token:
-        # First login again to get a fresh session
-        login_response = test_endpoint(
-            "Login for CSRF test",
-            "/api/login",
-            200,
-            use_auth=False,
-            method="POST",
-            data={"username": "admin", "password": "password"}
-        )
-        if login_response:
-            session_token = login_response.get("sessionToken")
-            csrf_token = login_response.get("csrfToken", "")
-            
-            # Try POST without CSRF token
-            headers = {"Authorization": f"Token {session_token}"}
-            try:
-                response = requests.post(f"{BASE_URL}/api/system/reboot", headers=headers)
-                if response.status_code == 403:
-                    print_result("CSRF protection (POST without token)", "PASS")
-                else:
-                    print_result("CSRF protection (POST without token)", "FAIL", f"Expected 403, got {response.status_code}")
-            except requests.exceptions.RequestException as e:
-                print_result("CSRF protection (POST without token)", "FAIL", str(e))
+        print_result("Login for system endpoint tests", "FAIL")
     
     print()
+    print("Testing hardware monitoring endpoints with authentication...")
     
-    # Test authentication
-    print("Testing authentication...")
-    test_endpoint("Test endpoint without auth", "/api/test", 401, use_auth=False)
-    test_endpoint_with_json_validation(
-        "Test endpoint with auth", "/api/test", 200, "message", use_auth=True
-    )
+    # Test hardware endpoints using AuthTester
+    auth.login()
     
-    print()
-    print("Testing system endpoints...")
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/temperature")
+    print_result("Temperature with auth", "PASS" if success else "FAIL")
     
-    # System endpoints
-    test_endpoint_with_json_validation(
-        "System info", "/api/system/info", 200, "hostname"
-    )
-    test_endpoint_with_json_validation(
-        "System status", "/api/system/status", 200, "health"
-    )
-    test_endpoint_with_json_validation(
-        "System reboot", "/api/system/reboot", 202, "message"
-    )
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/power")
+    print_result("Power with auth", "PASS" if success else "FAIL")
     
-    print()
-    print("Testing hardware monitoring endpoints...")
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/fans")
+    print_result("Fans with auth", "PASS" if success else "FAIL")
     
-    # Hardware monitoring endpoints
-    test_endpoint_with_json_validation(
-        "Temperature sensors", "/api/hwmon/temperature", 200, "cpu"
-    )
-    test_endpoint_with_json_validation(
-        "Power sensors", "/api/hwmon/power", 200, "total"
-    )
-    test_endpoint_with_json_validation(
-        "Fan speeds", "/api/hwmon/fans", 200, "fan1"
-    )
-    test_endpoint_with_json_validation(
-        "Voltage sensors", "/api/hwmon/voltage", 200, "vdd_cpu"
-    )
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/voltage")
+    print_result("Voltage with auth", "PASS" if success else "FAIL")
+    
+    auth.logout()
     
     print()
     print("Testing error cases...")
