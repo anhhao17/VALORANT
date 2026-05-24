@@ -20,6 +20,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("GET /api/streams called");
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             try
             {
                 auto& streamer = streaming::VideoStreamer::getInstance();
@@ -59,6 +68,15 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("POST /api/streams called");
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             try
             {
@@ -137,6 +155,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("POST /api/streams/*/start called");
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
             if (pos == std::string::npos)
@@ -193,6 +220,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
             LOG_DEBUG("POST /api/streams/*/stop called");
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -406,6 +442,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("GET {} called", target);
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract stream ID from path
             size_t pos = target.find("/video/");
             if (pos == std::string::npos)
@@ -498,6 +543,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("GET {} called", target);
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
             if (pos == std::string::npos)
@@ -554,6 +608,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("POST {} called", target);
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
             if (pos == std::string::npos)
@@ -605,6 +668,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("GET /api/streams/statistics called");
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             try
             {
                 auto& streamer = streaming::VideoStreamer::getInstance();
@@ -644,6 +716,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
             LOG_DEBUG("POST {} called", target);
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -719,6 +800,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("POST {} called", target);
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract recording ID from path
             size_t pos = target.find("/api/recordings/");
             if (pos == std::string::npos)
@@ -776,6 +866,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("GET /api/recordings called");
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             try
             {
                 auto& streamer = streaming::VideoStreamer::getInstance();
@@ -815,6 +914,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
             LOG_DEBUG("DELETE {} called", target);
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::delete_)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             // Extract recording ID from path
             size_t pos = target.find("/api/recordings/");
@@ -864,6 +972,15 @@ void registerStreamingRoutes(App& app)
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
             LOG_DEBUG("GET {} called", target);
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::get)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
