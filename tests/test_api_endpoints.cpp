@@ -6,6 +6,7 @@
 #include "bmcweb/async_resp.hpp"
 #include "bmcweb/session.hpp"
 #include "bmcweb/routes/auth.hpp"
+#include "bmcweb/user/user.hpp"
 #include <nlohmann/json.hpp>
 
 using namespace embed::bmcweb;
@@ -17,6 +18,10 @@ class ApiEndpointsTest : public ::testing::Test
     void SetUp() override
     {
         app = std::make_unique<App>();
+        
+        // Initialize UserManager for tests
+        [[maybe_unused]] auto& userManager = user::UserManager::getInstance();
+        // Ensure UserManager is initialized (it will create default admin user if needed)
     }
 
     std::unique_ptr<App> app;
@@ -70,11 +75,11 @@ TEST_F(ApiEndpointsTest, LoginEndpoint)
     // Validate the app to build the routing trie
     app->validate();
     
-    // Create a Beast request
+    // Create a Beast request with default admin credentials (admin/admin)
     http::request<http::string_body> beastReq;
     beastReq.method(http::verb::post);
     beastReq.target("/api/login");
-    beastReq.body() = "{\"username\":\"admin\",\"password\":\"password\"}";
+    beastReq.body() = "{\"username\":\"admin\",\"password\":\"admin\"}";
     
     // Wrap in our Request class
     Request req(beastReq);
