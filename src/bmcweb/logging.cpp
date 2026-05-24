@@ -16,7 +16,6 @@ void initLogging(spdlog::level::level_enum logLevel, const std::string& logFile)
         // Create console sink with color
         auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         consoleSink->set_level(logLevel);
-        consoleSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
 
         std::vector<spdlog::sink_ptr> sinks;
         sinks.push_back(consoleSink);
@@ -30,7 +29,6 @@ void initLogging(spdlog::level::level_enum logLevel, const std::string& logFile)
                 auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
                     logFile, 1024 * 1024 * 5, 3);
                 fileSink->set_level(logLevel);
-                fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] [thread %t] [%s:%#] %v");
                 sinks.push_back(fileSink);
             }
             catch (const spdlog::spdlog_ex& ex)
@@ -44,6 +42,10 @@ void initLogging(spdlog::level::level_enum logLevel, const std::string& logFile)
         g_logger = std::make_shared<spdlog::logger>("jetson", sinks.begin(), sinks.end());
         g_logger->set_level(logLevel);
         g_logger->flush_on(spdlog::level::warn);
+        
+        // Enable source location for all log levels
+        g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] [%s:%#] %v");
+        g_logger->enable_backtrace(32);
 
         // Register as default logger
         spdlog::set_default_logger(g_logger);
