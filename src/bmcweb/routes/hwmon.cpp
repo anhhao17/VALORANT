@@ -1,5 +1,6 @@
 #include "hwmon.hpp"
 #include "../logging.hpp"
+#include "../hardware/sensor.hpp"
 #include <boost/beast/http/field.hpp>
 
 namespace embed::bmcweb::routes
@@ -9,16 +10,18 @@ void registerHwMonRoutes(App& app)
 {
     LOG_INFO("Registering hardware monitoring routes");
 
+    auto& sensorReader = hardware::SensorReader::getInstance();
+
     // Temperature sensors endpoint
     JETSON_ROUTE(app, "/api/hwmon/temperature")
-        .setHandler([](const Request&,
+        .setHandler([&sensorReader](const Request&,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("Temperature sensors endpoint called");
             nlohmann::json temperatures;
-            temperatures["cpu"] = 45.5;
-            temperatures["gpu"] = 42.3;
-            temperatures["pmic"] = 38.1;
-            temperatures["thermal"] = 40.0;
+            temperatures["cpu"] = sensorReader.getCpuTemperature();
+            temperatures["gpu"] = sensorReader.getGpuTemperature();
+            temperatures["pmic"] = sensorReader.getPmicTemperature();
+            temperatures["thermal"] = sensorReader.getThermalTemperature();
             
             asyncResp->res.result(status::ok);
             asyncResp->res.set(field::content_type, "application/json");
@@ -28,14 +31,14 @@ void registerHwMonRoutes(App& app)
 
     // Power sensors endpoint
     JETSON_ROUTE(app, "/api/hwmon/power")
-        .setHandler([](const Request&,
+        .setHandler([&sensorReader](const Request&,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("Power sensors endpoint called");
             nlohmann::json power;
-            power["total"] = 5.2;
-            power["cpu"] = 3.1;
-            power["gpu"] = 1.8;
-            power["ddr"] = 0.3;
+            power["total"] = sensorReader.getTotalPower();
+            power["cpu"] = sensorReader.getCpuPower();
+            power["gpu"] = sensorReader.getGpuPower();
+            power["ddr"] = sensorReader.getDdrPower();
             
             asyncResp->res.result(status::ok);
             asyncResp->res.set(field::content_type, "application/json");
@@ -45,13 +48,13 @@ void registerHwMonRoutes(App& app)
 
     // Fan speeds endpoint
     JETSON_ROUTE(app, "/api/hwmon/fans")
-        .setHandler([](const Request&,
+        .setHandler([&sensorReader](const Request&,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("Fan speeds endpoint called");
             nlohmann::json fans;
-            fans["fan1"] = 1200;
-            fans["fan2"] = 1150;
-            fans["fan3"] = 0;
+            fans["fan1"] = sensorReader.getFan1Speed();
+            fans["fan2"] = sensorReader.getFan2Speed();
+            fans["fan3"] = sensorReader.getFan3Speed();
             
             asyncResp->res.result(status::ok);
             asyncResp->res.set(field::content_type, "application/json");
@@ -61,14 +64,14 @@ void registerHwMonRoutes(App& app)
 
     // Voltage sensors endpoint
     JETSON_ROUTE(app, "/api/hwmon/voltage")
-        .setHandler([](const Request&,
+        .setHandler([&sensorReader](const Request&,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("Voltage sensors endpoint called");
             nlohmann::json voltage;
-            voltage["vdd_cpu"] = 0.9;
-            voltage["vdd_gpu"] = 0.85;
-            voltage["vdd_ddr"] = 1.1;
-            voltage["vdd_5v"] = 5.0;
+            voltage["vdd_cpu"] = sensorReader.getCpuVoltage();
+            voltage["vdd_gpu"] = sensorReader.getGpuVoltage();
+            voltage["vdd_ddr"] = sensorReader.getDdrVoltage();
+            voltage["vdd_5v"] = sensorReader.get5vVoltage();
             
             asyncResp->res.result(status::ok);
             asyncResp->res.set(field::content_type, "application/json");

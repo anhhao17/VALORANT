@@ -15,6 +15,7 @@
 #include "bmcweb/routes/websocket.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
+#include "bmcweb/hardware/sensor.hpp"
 
 using namespace embed::bmcweb::http;
 
@@ -25,6 +26,7 @@ int main(int argc, char* argv[])
     std::string cert_file;
     std::string key_file;
     unsigned short port = 8080;
+    bool use_real_hardware = true;
     
     for (int i = 1; i < argc; i++)
     {
@@ -46,6 +48,10 @@ int main(int argc, char* argv[])
         {
             port = std::stoi(argv[++i]);
         }
+        else if (arg == "--mock-hardware")
+        {
+            use_real_hardware = false;
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout << "Usage: " << argv[0] << " [options]\n"
@@ -54,6 +60,7 @@ int main(int argc, char* argv[])
                       << "  --cert <file>       SSL certificate file path\n"
                       << "  --key <file>        SSL private key file path\n"
                       << "  --port <port>       Server port (default: 8080, 8443 with SSL)\n"
+                      << "  --mock-hardware     Use mock hardware data instead of real sensors\n"
                       << "  --help, -h          Show this help message\n";
             return 0;
         }
@@ -65,12 +72,18 @@ int main(int argc, char* argv[])
         std::cerr << "Use --cert and --key to specify certificate and key files\n";
         return 1;
     }
+    
     // Initialize logging
     embed::bmcweb::initLogging(spdlog::level::info, "jetson.log");
 
     LOG_INFO("==========================================");
     LOG_INFO("Jetson BMCweb - Minimal Implementation");
     LOG_INFO("==========================================");
+
+    // Initialize hardware sensor reader
+    LOG_INFO("Initializing hardware sensor reader (mode: {})", use_real_hardware ? "Real" : "Mock");
+    auto& sensorReader = embed::bmcweb::hardware::SensorReader::getInstance();
+    sensorReader.setUseRealHardware(use_real_hardware);
 
     // Create application
     LOG_INFO("Creating application instance");
