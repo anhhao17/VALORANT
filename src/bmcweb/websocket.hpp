@@ -50,7 +50,6 @@ class WebSocketSession : public std::enable_shared_from_this<WebSocketSession>
    private:
     void onAccept(beast::error_code ec);
     void onRead(beast::error_code ec, std::size_t bytes_transferred);
-    void onWrite(beast::error_code ec, std::size_t bytes_transferred);
     void doRead();
     void handleMessage(const std::string& message);
     
@@ -60,7 +59,8 @@ class WebSocketSession : public std::enable_shared_from_this<WebSocketSession>
     bool active_;
     std::string username_;
     bool is_upgrade_;
-    
+    http::request<http::string_body> upgrade_req_;
+
     // Memory optimization: fixed buffer size
     static constexpr std::size_t MAX_MESSAGE_SIZE = 4096;
 };

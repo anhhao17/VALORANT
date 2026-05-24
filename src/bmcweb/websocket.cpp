@@ -17,24 +17,23 @@ WebSocketSession::WebSocketSession(tcp::socket&& socket, App& app)
 }
 
 WebSocketSession::WebSocketSession(tcp::socket&& socket, App& app, http::request<http::string_body>& req)
-    : ws_(std::move(socket)), app_(app), active_(false), is_upgrade_(true)
+    : ws_(std::move(socket)), app_(app), active_(false), is_upgrade_(true), upgrade_req_(std::move(req))
 {
     LOG_DEBUG("WebSocket session created for HTTP upgrade");
-    // Accept the WebSocket upgrade with the HTTP request
-    ws_.async_accept(req,
-        [self = shared_from_this()](beast::error_code ec) {
-            self->onAccept(ec);
-        });
 }
 
 void WebSocketSession::run()
 {
-    // If this is an HTTP upgrade, the accept was already called in the constructor
+    // If this is an HTTP upgrade, accept the WebSocket upgrade now
     if (is_upgrade_)
     {
+        ws_.async_accept(upgrade_req_,
+            [self = shared_from_this()](beast::error_code ec) {
+                self->onAccept(ec);
+            });
         return;
     }
-    
+
     // Set WebSocket options
     websocket::stream_base::timeout timeout{
         std::chrono::seconds(30),   // handshake timeout
@@ -42,7 +41,7 @@ void WebSocketSession::run()
         false                       // no keep-alive pings
     };
     ws_.set_option(timeout);
-    
+
     // Accept the WebSocket handshake
     ws_.async_accept(
         [self = shared_from_this()](beast::error_code ec) {

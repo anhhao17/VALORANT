@@ -26,6 +26,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { systemApi, hwmonApi } from '../api'
 import { websocketService } from '../websocket'
+import { useAuthStore } from '../store/auth'
 
 const systemStatus = ref(null)
 const temperature = ref(null)
@@ -68,6 +69,12 @@ onMounted(async () => {
     })
 
     websocketService.on('sensor_data', handleSensorData)
+
+    // Set session token for WebSocket authentication
+    const authStore = useAuthStore()
+    if (authStore.sessionToken) {
+      websocketService.setSessionToken(authStore.sessionToken)
+    }
 
     websocketService.connect()
   } catch (error) {

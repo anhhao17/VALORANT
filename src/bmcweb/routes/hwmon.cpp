@@ -1,5 +1,6 @@
 #include "hwmon.hpp"
 #include "../logging.hpp"
+#include <boost/beast/http/field.hpp>
 
 namespace embed::bmcweb::routes
 {
@@ -20,6 +21,7 @@ void registerHwMonRoutes(App& app)
             temperatures["thermal"] = 40.0;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(temperatures.dump());
             LOG_DEBUG("Temperature data sent");
         });
@@ -36,6 +38,7 @@ void registerHwMonRoutes(App& app)
             power["ddr"] = 0.3;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(power.dump());
             LOG_DEBUG("Power data sent");
         });
@@ -51,6 +54,7 @@ void registerHwMonRoutes(App& app)
             fans["fan3"] = 0;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(fans.dump());
             LOG_DEBUG("Fan data sent");
         });
@@ -67,6 +71,7 @@ void registerHwMonRoutes(App& app)
             voltage["vdd_5v"] = 5.0;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(voltage.dump());
             LOG_DEBUG("Voltage data sent");
         });

@@ -1,5 +1,6 @@
 #include "server.hpp"
 #include "websocket.hpp"
+#include "session.hpp"
 #include "logging.hpp"
 #include <algorithm>
 #include <random>
@@ -122,7 +123,7 @@ void HttpSession::handleWebSocketUpgrade()
 {
     // Accept the WebSocket upgrade - pass the appropriate stream
     std::shared_ptr<WebSocketSession> wsSession;
-    
+
     if (use_ssl_)
     {
         wsSession = std::make_shared<WebSocketSession>(std::move(ssl_stream_->next_layer()), app_, req);
@@ -131,12 +132,12 @@ void HttpSession::handleWebSocketUpgrade()
     {
         wsSession = std::make_shared<WebSocketSession>(std::move(stream_->socket()), app_, req);
     }
-    
+
     // Generate unique session ID
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, 15);
-    
+
     std::stringstream ss;
     ss << std::hex;
     for (int i = 0; i < 32; ++i)
@@ -144,15 +145,17 @@ void HttpSession::handleWebSocketUpgrade()
         ss << std::setw(1) << dis(gen);
     }
     std::string session_id = ss.str();
-    
+
     // Add to WebSocket manager
     auto& manager = WebSocketManager::getInstance();
     manager.addSession(session_id, wsSession);
-    
-    // Run the WebSocket session (accept is called in constructor)
+
+    // Run the WebSocket session
     wsSession->run();
-    
-    LOG_INFO("WebSocket upgrade completed for session: {}", session_id);
+
+    // The HTTP session will be destroyed after this function returns
+    // The WebSocket session now owns the socket
+    LOG_INFO("WebSocket upgrade initiated for session: {}", session_id);
 }
 
 void HttpSession::onWrite(bool close, beast::error_code ec, std::size_t /* bytesTransferred */)
@@ -301,12 +304,48 @@ bool HttpSession::validateWebSocketProtocol()
 
 bool HttpSession::validateWebSocketToken()
 {
-    // Check for authentication token in headers or cookies
+    // First check if token was extracted from WebSocket protocol
+    auto protocol_header = req.find("Sec-WebSocket-Protocol");
+    if (protocol_header != req.end())
+    {
+        std::string protocols = std::string(protocol_header->value());
+        std::stringstream ss(protocols);
+        std::string protocol;
+        while (std::getline(ss, protocol, ','))
+        {
+            // Trim whitespace
+            protocol.erase(0, protocol.find_first_not_of(" \t\n\r"));
+            protocol.erase(protocol.find_last_not_of(" \t\n\r") + 1);
+
+            if (protocol.find("token=") == 0)
+            {
+                std::string token = protocol.substr(6);
+                if (!token.empty())
+                {
+                    // Validate token against session store
+                    auto& sessionStore = SessionStore::getInstance();
+                    auto session = sessionStore.loginSessionByToken(token);
+                    if (session)
+                    {
+                        LOG_INFO("WebSocket token validation passed via protocol: token={}", token.substr(0, 10) + "...");
+                        return true;
+                    }
+                    else
+                    {
+                        LOG_WARN("Invalid WebSocket token from protocol");
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: Check for authentication token in headers or cookies
     auto auth_header = req.find(http::field::authorization);
     auto cookie_header = req.find(http::field::cookie);
-    
+
     std::string token;
-    
+
     if (auth_header != req.end())
     {
         // Extract token from Authorization header (Bearer token)
@@ -314,6 +353,10 @@ bool HttpSession::validateWebSocketToken()
         if (auth_value.find("Bearer ") == 0)
         {
             token = auth_value.substr(7);
+        }
+        else if (auth_value.find("Token ") == 0)
+        {
+            token = auth_value.substr(6);
         }
         else
         {
@@ -324,11 +367,11 @@ bool HttpSession::validateWebSocketToken()
     {
         // Extract token from cookie
         std::string cookie_value = std::string(cookie_header->value());
-        // Simple parsing for session_token cookie
-        size_t token_pos = cookie_value.find("session_token=");
+        // Simple parsing for SESSION cookie
+        size_t token_pos = cookie_value.find("SESSION=");
         if (token_pos != std::string::npos)
         {
-            size_t token_start = token_pos + 14;
+            size_t token_start = token_pos + 8;
             size_t token_end = cookie_value.find(";", token_start);
             if (token_end == std::string::npos)
             {
@@ -340,17 +383,26 @@ bool HttpSession::validateWebSocketToken()
             }
         }
     }
-    
+
     if (token.empty())
     {
         LOG_WARN("No authentication token found");
         return false;
     }
-    
-    // In a real implementation, validate the token against session store
-    // For now, just check if token is not empty
-    LOG_INFO("WebSocket token validation passed: token={}", token.substr(0, 10) + "...");
-    return true;
+
+    // Validate token against session store
+    auto& sessionStore = SessionStore::getInstance();
+    auto session = sessionStore.loginSessionByToken(token);
+    if (session)
+    {
+        LOG_INFO("WebSocket token validation passed: token={}", token.substr(0, 10) + "...");
+        return true;
+    }
+    else
+    {
+        LOG_WARN("Invalid WebSocket token");
+        return false;
+    }
 }
 
 // HttpListener implementation

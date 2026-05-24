@@ -1,5 +1,6 @@
 #include "system.hpp"
 #include "../logging.hpp"
+#include <boost/beast/http/field.hpp>
 
 namespace embed::bmcweb::routes
 {
@@ -20,6 +21,7 @@ void registerSystemRoutes(App& app)
             systemInfo["uptime"] = 3600;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(systemInfo.dump());
             LOG_DEBUG("System info response sent");
         });
@@ -36,6 +38,7 @@ void registerSystemRoutes(App& app)
             status["cpu_usage"] = 25.3;
             
             asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(status.dump());
             LOG_DEBUG("System status response sent");
         });
@@ -50,6 +53,7 @@ void registerSystemRoutes(App& app)
             response["status"] = "rebooting";
             
             asyncResp->res.result(status::accepted);
+            asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(response.dump());
             LOG_INFO("System reboot initiated");
         });

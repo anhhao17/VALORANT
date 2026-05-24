@@ -6,15 +6,24 @@ class WebSocketService {
     this.reconnectAttempts = 0
     this.maxReconnectAttempts = 10
     this.listeners = new Map()
+    this.sessionToken = ''
   }
 
-  connect(url = 'ws://localhost:8080') {
+  setSessionToken(token) {
+    this.sessionToken = token
+  }
+
+  connect(url = 'ws://localhost:8080/ws') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log('WebSocket already connected')
       return
     }
 
-    this.ws = new WebSocket(url)
+    // Create WebSocket with protocol format expected by backend
+    // Backend expects: view=<type>,token=<token>
+    // Valid view types: cl_view, ir_view, both_views, cl_sub_view, ir_sub_view, both_sub_views
+    const protocols = [`view=both_views,token=${this.sessionToken}`]
+    this.ws = new WebSocket(url, protocols)
 
     this.ws.onopen = () => {
       console.log('WebSocket connected')
