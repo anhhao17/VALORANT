@@ -6,6 +6,7 @@
 #include <boost/beast/http/status.hpp>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -104,6 +105,10 @@ inline std::string_view getFiletypeForExtension(std::string_view extension)
 inline void handleStaticAsset(
     const Request& req, const std::shared_ptr<AsyncResp>& asyncResp, const StaticFile& file)
 {
+    LOG_DEBUG(
+        "Serving static file: {} (content-type: {})", file.absolutePath.string(),
+        std::string(file.contentType));
+
     if (!file.contentType.empty())
     {
         asyncResp->res.set(http::field::content_type, std::string(file.contentType));
@@ -142,6 +147,7 @@ inline void handleStaticAsset(
         (std::istreambuf_iterator<char>(fileStream)), std::istreambuf_iterator<char>());
     fileStream.close();
 
+    LOG_DEBUG("File content size: {} bytes", content.length());
     asyncResp->res.body(content);
     asyncResp->res.result(http::status::ok);
 }
@@ -168,22 +174,21 @@ inline void addFile(App& app, const std::filesystem::directory_entry& dir)
 
     file.etag = getStaticEtag(webpath);
 
-    // Map index.html to root path
+    // Don't map index.html to root path to avoid trie conflicts
+    // Keep it as /index.html instead
     if (webpath.filename().string().starts_with("index.") && extension == ".html")
     {
-        webpath = webpath.parent_path();
-        if (webpath.string().empty() || webpath.string().back() != '/')
-        {
-            webpath += "/";
-            file.renamed = true;
-        }
+        // Keep the original path, don't remap to "/"
+        // This avoids conflicts with "/assets/..." routes
     }
 
     file.contentType = getFiletypeForExtension(extension);
 
     // Register route for this file
     std::string routePath = webpath.string();
-    LOG_INFO("Registering static route: {} -> {}", routePath, file.absolutePath.string());
+    LOG_INFO(
+        "Registering static route: '{}' -> '{}' (content-type: '{}')", routePath,
+        file.absolutePath.string(), std::string(file.contentType));
     app.route<>(routePath).setHandler(
         [file = std::move(file)](const Request& req, const std::shared_ptr<AsyncResp>& asyncResp) {
             handleStaticAsset(req, asyncResp, file);
@@ -214,8 +219,26 @@ inline void requestRoutes(App& app)
     std::vector<std::filesystem::directory_entry> paths(
         std::filesystem::begin(dirIter), std::filesystem::end(dirIter));
 
-    // Sort in reverse order to handle compressed files first
-    std::ranges::sort(paths, std::greater<std::filesystem::directory_entry>());
+    // Sort to ensure index.html is processed first (for "/" route)
+    std::ranges::sort(
+        paths,
+        [](const std::filesystem::directory_entry& a, const std::filesystem::directory_entry& b) {
+            std::string aName = a.path().filename().string();
+            std::string bName = b.path().filename().string();
+
+            // Prioritize index.html
+            if (aName.starts_with("index.") && aName.ends_with(".html"))
+            {
+                return true;
+            }
+            if (bName.starts_with("index.") && bName.ends_with(".html"))
+            {
+                return false;
+            }
+
+            // Otherwise sort by path length (shorter paths first)
+            return a.path().string().length() < b.path().string().length();
+        });
 
     for (const std::filesystem::directory_entry& dir : paths)
     {
@@ -231,6 +254,26 @@ inline void requestRoutes(App& app)
         {
             addFile(app, dir);
         }
+    }
+
+    // Add fallback route for "/" to serve index.html
+    std::filesystem::path indexPath = rootPath / "index.html";
+    if (std::filesystem::exists(indexPath))
+    {
+        StaticFile file;
+        file.absolutePath = indexPath;
+        file.contentType = "text/html;charset=UTF-8";
+        file.etag = getStaticEtag(indexPath);
+        file.renamed = true;
+
+        LOG_INFO(
+            "Registering fallback route: '/' -> '{}' (content-type: '{}')",
+            file.absolutePath.string(), std::string(file.contentType));
+        app.route<>("/").setHandler(
+            [file = std::move(file)](
+                const Request& req, const std::shared_ptr<AsyncResp>& asyncResp) {
+                handleStaticAsset(req, asyncResp, file);
+            });
     }
 
     LOG_INFO("Static file hosting enabled from: {}", rootPathStr);

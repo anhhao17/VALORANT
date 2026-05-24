@@ -11,7 +11,7 @@ namespace jetson::bmcweb::routing
 
 /**
  * @brief Trie node for URL pattern matching
- * 
+ *
  * Provides O(1) URL pattern matching using a trie data structure,
  * following bmcweb's efficient routing approach.
  */
@@ -22,12 +22,12 @@ class TrieNode
 
     std::unordered_map<char, std::shared_ptr<TrieNode>> children;
     bool isEnd;
-    unsigned int ruleIndex; // Index of the matching rule
+    unsigned int ruleIndex;  // Index of the matching rule
 };
 
 /**
  * @brief Trie-based URL pattern matcher
- * 
+ *
  * Efficient URL matching using trie data structure for O(1) lookup,
  * supporting both static routes and parameterized routes.
  */
@@ -65,22 +65,29 @@ class Trie
     {
         auto current = root_;
         std::vector<std::string> params;
-        
+
+        if (url.empty())
+        {
+            return {0, params};
+        }
+
         for (char c : url)
         {
             if (current->children.find(c) == current->children.end())
             {
-                return {0, params}; // No match
+                return {0, params};  // No match
             }
             current = current->children[c];
         }
-        
+
+        // Only return a match if we're at an exact endpoint
+        // This ensures we consumed ALL characters and are at a valid endpoint
         if (current->isEnd)
         {
             return {current->ruleIndex, params};
         }
-        
-        return {0, params}; // No match
+
+        return {0, params};  // No match - we consumed all characters but not at an endpoint
     }
 
     /**
@@ -100,4 +107,4 @@ class Trie
     std::shared_ptr<TrieNode> root_;
 };
 
-} // namespace jetson::bmcweb::routing
+}  // namespace jetson::bmcweb::routing
