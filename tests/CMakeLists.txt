@@ -38,6 +38,7 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/config/config.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/user/user.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/streamer.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/recording_manager.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/authorization/permission.cpp
 )
 

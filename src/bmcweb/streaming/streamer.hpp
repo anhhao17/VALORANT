@@ -1,6 +1,7 @@
 #pragma once
 
-#include <string>
+#include "stream_types.hpp"
+#include "recording_manager.hpp"
 #include <memory>
 #include <vector>
 #include <mutex>
@@ -8,92 +9,9 @@
 #include <unordered_map>
 #include <map>
 #include <thread>
-#include <cstdint>
 
 namespace embed::bmcweb::streaming
 {
-
-/**
- * @brief Stream source type
- */
-enum class StreamSourceType
-{
-    MP4_FILE,      // MP4 file with looping
-    CAMERA_DEVICE, // Real camera device (future)
-    NETWORK_STREAM // Network stream (future)
-};
-
-/**
- * @brief Stream recording state
- */
-enum class RecordingState
-{
-    STOPPED,
-    RECORDING,
-    PAUSED
-};
-
-/**
- * @brief Stream recording info
- */
-struct RecordingInfo
-{
-    std::string recordingId;
-    std::string streamId;
-    std::string filePath;
-    RecordingState state;
-    int64_t startTime;
-    int64_t duration;
-    uint64_t fileSize;
-    std::string format;
-};
-
-/**
- * @brief Stream statistics
- */
-struct StreamStatistics
-{
-    uint64_t bytesServed;
-    uint64_t framesServed;
-    uint64_t clientConnections;
-    int64_t startTime;
-    int64_t lastFrameTime;
-    double averageBitrate;
-    int currentViewers;
-};
-
-/**
- * @brief Stream configuration
- */
-struct StreamConfig
-{
-    std::string id;
-    std::string name;
-    StreamSourceType type;
-    std::string sourcePath; // MP4 file path or device path
-    bool enabled;
-    bool loop;
-    int quality; // 1-100
-    int bufferSize; // Buffer size in bytes
-    int segmentDuration; // Segment duration in seconds
-};
-
-/**
- * @brief Frame data structure
- */
-struct VideoFrame
-{
-    std::vector<uint8_t> data;
-    int width;
-    int height;
-    int64_t timestamp;
-    std::string codec;
-};
-
-/**
- * @brief Stream frame callback
- */
-using FrameCallback = std::function<void(const VideoFrame&)>;
 
 /**
  * @brief Video streaming service
@@ -138,7 +56,7 @@ class VideoStreamer
     // Configuration integration
     void applyConfiguration(const std::map<std::string, std::string>& config);
     
-    // Recording capabilities
+    // Recording capabilities (delegated to RecordingManager)
     std::string startRecording(const std::string& streamId, const std::string& format = "mp4");
     bool stopRecording(const std::string& recordingId);
     bool pauseRecording(const std::string& recordingId);
@@ -155,9 +73,6 @@ class VideoStreamer
     void streamThread(const std::string& id);
     void loadMp4File(const std::string& id);
     void updateStatistics(const std::string& id, size_t bytesServed);
-    void recordingThread(const std::string& recordingId, const std::string& streamId);
-    std::string generateRecordingId();
-    std::string generateRecordingPath(const std::string& streamId, const std::string& format);
     
     mutable std::mutex mutex_;
     std::unordered_map<std::string, StreamConfig> streams_;
@@ -166,10 +81,6 @@ class VideoStreamer
     std::unordered_map<std::string, FrameCallback> frameCallbacks_;
     std::unordered_map<std::string, std::thread> streamThreads_;
     std::unordered_map<std::string, StreamStatistics> statistics_;
-    std::unordered_map<std::string, RecordingInfo> recordings_;
-    std::unordered_map<std::string, std::thread> recordingThreads_;
-    std::string recordingPath_;
-    bool recordingEnabled_;
 };
 
 } // namespace embed::bmcweb::streaming

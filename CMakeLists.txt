@@ -51,6 +51,7 @@ add_executable(jetson
     src/bmcweb/config/config.cpp
     src/bmcweb/user/user.cpp
     src/bmcweb/streaming/streamer.cpp
+    src/bmcweb/streaming/recording_manager.cpp
     src/bmcweb/authorization/permission.cpp
 )
 
