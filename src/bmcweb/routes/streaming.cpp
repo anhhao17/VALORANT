@@ -512,6 +512,226 @@ void registerStreamingRoutes(App& app)
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
+
+    // POST /api/streams/{id}/record - Start recording a stream
+    JETSON_ROUTE(app, "/api/streams/*/record")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("POST {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/record", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                // Parse optional format from body
+                std::string format = "mp4";
+                try
+                {
+                    auto body = nlohmann::json::parse(req.body());
+                    format = body.value("format", "mp4");
+                }
+                catch (...)
+                {
+                    // Use default format if body parsing fails
+                }
+
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                std::string recordingId = streamer.startRecording(id, format);
+
+                if (recordingId.empty())
+                {
+                    asyncResp->res.result(status::bad_request);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to start recording\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording started successfully";
+                response["recordingId"] = recordingId;
+                response["streamId"] = id;
+                response["format"] = format;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording started for stream: {}, recording: {}", id, recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error starting recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // POST /api/recordings/{id}/stop - Stop recording
+    JETSON_ROUTE(app, "/api/recordings/*/stop")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("POST {} called", target);
+
+            // Extract recording ID from path
+            size_t pos = target.find("/api/recordings/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/stop", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string recordingId = target.substr(pos + 16, endPos - (pos + 16));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.stopRecording(recordingId))
+                {
+                    asyncResp->res.result(status::bad_request);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to stop recording\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording stopped successfully";
+                response["recordingId"] = recordingId;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording stopped: {}", recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error stopping recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/recordings - Get all recordings
+    JETSON_ROUTE(app, "/api/recordings")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            LOG_DEBUG("GET /api/recordings called");
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto recordings = streamer.getAllRecordings();
+
+                nlohmann::json response = nlohmann::json::array();
+                for (const auto& recording : recordings)
+                {
+                    nlohmann::json recordingJson;
+                    recordingJson["recordingId"] = recording.recordingId;
+                    recordingJson["streamId"] = recording.streamId;
+                    recordingJson["filePath"] = recording.filePath;
+                    recordingJson["state"] = static_cast<int>(recording.state);
+                    recordingJson["startTime"] = recording.startTime;
+                    recordingJson["duration"] = recording.duration;
+                    recordingJson["fileSize"] = recording.fileSize;
+                    recordingJson["format"] = recording.format;
+                    response.push_back(recordingJson);
+                }
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting recordings: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // DELETE /api/recordings/{id} - Delete recording
+    JETSON_ROUTE(app, "/api/recordings/*")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("DELETE {} called", target);
+
+            // Extract recording ID from path
+            size_t pos = target.find("/api/recordings/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string recordingId = target.substr(pos + 16);
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.deleteRecording(recordingId))
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Recording not found\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording deleted successfully";
+                response["recordingId"] = recordingId;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording deleted: {}", recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error deleting recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
 }
 
 } // namespace embed::bmcweb::routes

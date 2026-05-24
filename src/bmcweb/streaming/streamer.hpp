@@ -24,6 +24,31 @@ enum class StreamSourceType
 };
 
 /**
+ * @brief Stream recording state
+ */
+enum class RecordingState
+{
+    STOPPED,
+    RECORDING,
+    PAUSED
+};
+
+/**
+ * @brief Stream recording info
+ */
+struct RecordingInfo
+{
+    std::string recordingId;
+    std::string streamId;
+    std::string filePath;
+    RecordingState state;
+    int64_t startTime;
+    int64_t duration;
+    uint64_t fileSize;
+    std::string format;
+};
+
+/**
  * @brief Stream statistics
  */
 struct StreamStatistics
@@ -113,6 +138,16 @@ class VideoStreamer
     // Configuration integration
     void applyConfiguration(const std::map<std::string, std::string>& config);
     
+    // Recording capabilities
+    std::string startRecording(const std::string& streamId, const std::string& format = "mp4");
+    bool stopRecording(const std::string& recordingId);
+    bool pauseRecording(const std::string& recordingId);
+    bool resumeRecording(const std::string& recordingId);
+    RecordingInfo getRecordingInfo(const std::string& recordingId) const;
+    std::vector<RecordingInfo> getAllRecordings() const;
+    std::vector<RecordingInfo> getStreamRecordings(const std::string& streamId) const;
+    bool deleteRecording(const std::string& recordingId);
+    
    private:
     VideoStreamer();
     ~VideoStreamer();
@@ -120,6 +155,9 @@ class VideoStreamer
     void streamThread(const std::string& id);
     void loadMp4File(const std::string& id);
     void updateStatistics(const std::string& id, size_t bytesServed);
+    void recordingThread(const std::string& recordingId, const std::string& streamId);
+    std::string generateRecordingId();
+    std::string generateRecordingPath(const std::string& streamId, const std::string& format);
     
     mutable std::mutex mutex_;
     std::unordered_map<std::string, StreamConfig> streams_;
@@ -128,6 +166,10 @@ class VideoStreamer
     std::unordered_map<std::string, FrameCallback> frameCallbacks_;
     std::unordered_map<std::string, std::thread> streamThreads_;
     std::unordered_map<std::string, StreamStatistics> statistics_;
+    std::unordered_map<std::string, RecordingInfo> recordings_;
+    std::unordered_map<std::string, std::thread> recordingThreads_;
+    std::string recordingPath_;
+    bool recordingEnabled_;
 };
 
 } // namespace embed::bmcweb::streaming
