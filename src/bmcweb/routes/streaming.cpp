@@ -365,6 +365,153 @@ void registerStreamingRoutes(App& app)
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
+
+    // GET /api/streams/{id}/statistics - Get stream statistics
+    JETSON_ROUTE(app, "/api/streams/*/statistics")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("GET {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/statistics", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto stats = streamer.getStreamStatistics(id);
+
+                nlohmann::json response;
+                response["streamId"] = id;
+                response["bytesServed"] = stats.bytesServed;
+                response["framesServed"] = stats.framesServed;
+                response["clientConnections"] = stats.clientConnections;
+                response["startTime"] = stats.startTime;
+                response["lastFrameTime"] = stats.lastFrameTime;
+                response["averageBitrate"] = stats.averageBitrate;
+                response["currentViewers"] = stats.currentViewers;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // POST /api/streams/{id}/statistics/reset - Reset stream statistics
+    JETSON_ROUTE(app, "/api/streams/*/statistics/reset")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("POST {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/statistics/reset", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                streamer.resetStreamStatistics(id);
+
+                nlohmann::json response;
+                response["message"] = "Statistics reset successfully";
+                response["streamId"] = id;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Statistics reset for stream: {}", id);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error resetting stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/streams/statistics - Get all stream statistics
+    JETSON_ROUTE(app, "/api/streams/statistics")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            LOG_DEBUG("GET /api/streams/statistics called");
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto allStats = streamer.getAllStreamStatistics();
+
+                nlohmann::json response = nlohmann::json::array();
+                for (const auto& [id, stats] : allStats)
+                {
+                    nlohmann::json statsJson;
+                    statsJson["streamId"] = id;
+                    statsJson["bytesServed"] = stats.bytesServed;
+                    statsJson["framesServed"] = stats.framesServed;
+                    statsJson["clientConnections"] = stats.clientConnections;
+                    statsJson["startTime"] = stats.startTime;
+                    statsJson["lastFrameTime"] = stats.lastFrameTime;
+                    statsJson["averageBitrate"] = stats.averageBitrate;
+                    statsJson["currentViewers"] = stats.currentViewers;
+                    response.push_back(statsJson);
+                }
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting all stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
 }
 
 } // namespace embed::bmcweb::routes

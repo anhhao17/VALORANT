@@ -172,7 +172,17 @@ void ConfigManager::setDefaultConfig()
         // WebSocket settings
         {"websocket.enable", "true"},
         {"websocket.max_connections", "10"},
-        {"websocket.heartbeat_interval", "30"}
+        {"websocket.heartbeat_interval", "30"},
+        
+        // Streaming settings
+        {"streaming.enable", "true"},
+        {"streaming.max_streams", "10"},
+        {"streaming.default_quality", "80"},
+        {"streaming.default_loop", "true"},
+        {"streaming.buffer_size", "1048576"},
+        {"streaming.segment_duration", "10"},
+        {"streaming.recording_path", "/var/lib/jetson/recordings"},
+        {"streaming.enable_recording", "false"}
     };
     
     LOG_INFO("Using default configuration");
@@ -468,6 +478,35 @@ bool ConfigManager::updateSecurityConfig(const std::map<std::string, std::string
     }
     
     LOG_INFO("Security configuration updated");
+    return true;
+}
+
+std::map<std::string, std::string> ConfigManager::getStreamingConfig()
+{
+    std::map<std::string, std::string> streamingConfig;
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    for (const auto& [key, value] : config_)
+    {
+        if (key.find("streaming.") == 0)
+        {
+            streamingConfig[key.substr(10)] = value;
+        }
+    }
+    
+    return streamingConfig;
+}
+
+bool ConfigManager::updateStreamingConfig(const std::map<std::string, std::string>& config)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    for (const auto& [key, value] : config)
+    {
+        config_["streaming." + key] = value;
+    }
+    
+    LOG_INFO("Streaming configuration updated");
     return true;
 }
 

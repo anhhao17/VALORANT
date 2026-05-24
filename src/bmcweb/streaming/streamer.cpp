@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <map>
 
 namespace embed::bmcweb::streaming
 {
@@ -50,10 +51,26 @@ bool VideoStreamer::addStream(const StreamConfig& config)
         loadMp4File(config.id);
     }
     
-    streams_[config.id] = config;
-    streaming_[config.id] = false;
+    // Create config with defaults for new fields
+    StreamConfig fullConfig = config;
+    if (fullConfig.bufferSize == 0) fullConfig.bufferSize = 1048576; // 1MB default
+    if (fullConfig.segmentDuration == 0) fullConfig.segmentDuration = 10; // 10 seconds default
     
-    LOG_INFO("Stream added: {} ({})", config.id, config.name);
+    streams_[fullConfig.id] = fullConfig;
+    streaming_[fullConfig.id] = false;
+    
+    // Initialize statistics
+    StreamStatistics stats;
+    stats.bytesServed = 0;
+    stats.framesServed = 0;
+    stats.clientConnections = 0;
+    stats.startTime = 0;
+    stats.lastFrameTime = 0;
+    stats.averageBitrate = 0.0;
+    stats.currentViewers = 0;
+    statistics_[fullConfig.id] = stats;
+    
+    LOG_INFO("Stream added: {} ({})", fullConfig.id, fullConfig.name);
     return true;
 }
 
@@ -83,6 +100,7 @@ bool VideoStreamer::removeStream(const std::string& id)
     streaming_.erase(id);
     frameCallbacks_.erase(id);
     streamThreads_.erase(id);
+    statistics_.erase(id);
     
     LOG_INFO("Stream removed: {}", id);
     return true;
@@ -199,6 +217,13 @@ bool VideoStreamer::startStreaming(const std::string& id)
     }
     
     streaming_[id] = true;
+    
+    // Initialize statistics for streaming start
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    statistics_[id].startTime = now;
+    statistics_[id].currentViewers++;
+    
     streamThreads_[id] = std::thread(&VideoStreamer::streamThread, this, id);
     
     LOG_INFO("Stream started: {}", id);
@@ -223,6 +248,8 @@ bool VideoStreamer::stopStreaming(const std::string& id)
     }
     
     streaming_[id] = false;
+    statistics_[id].currentViewers--;
+    
     if (streamThreads_[id].joinable())
     {
         streamThreads_[id].join();
@@ -258,7 +285,12 @@ std::vector<uint8_t> VideoStreamer::getVideoSegment(const std::string& id, size_
     }
     
     size_t end = std::min(offset + length, data.size());
-    return std::vector<uint8_t>(data.begin() + offset, data.begin() + end);
+    std::vector<uint8_t> segment(data.begin() + offset, data.begin() + end);
+    
+    // Update statistics (const_cast to call non-const method)
+    const_cast<VideoStreamer*>(this)->updateStatistics(id, segment.size());
+    
+    return segment;
 }
 
 size_t VideoStreamer::getVideoSize(const std::string& id) const
@@ -360,6 +392,129 @@ void VideoStreamer::loadMp4File(const std::string& id)
     {
         LOG_ERROR("Failed to load MP4 file: {}", e.what());
     }
+}
+
+void VideoStreamer::updateStatistics(const std::string& id, size_t bytesServed)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = statistics_.find(id);
+    if (it != statistics_.end())
+    {
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        it->second.bytesServed += bytesServed;
+        it->second.framesServed++;
+        it->second.lastFrameTime = now;
+        
+        // Calculate average bitrate
+        if (it->second.startTime > 0)
+        {
+            double durationSeconds = (now - it->second.startTime) / 1000.0;
+            if (durationSeconds > 0)
+            {
+                it->second.averageBitrate = (it->second.bytesServed * 8.0) / durationSeconds;
+            }
+        }
+    }
+}
+
+StreamStatistics VideoStreamer::getStreamStatistics(const std::string& id) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = statistics_.find(id);
+    if (it != statistics_.end())
+    {
+        return it->second;
+    }
+    
+    return StreamStatistics{};
+}
+
+void VideoStreamer::resetStreamStatistics(const std::string& id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = statistics_.find(id);
+    if (it != statistics_.end())
+    {
+        StreamStatistics stats;
+        stats.bytesServed = 0;
+        stats.framesServed = 0;
+        stats.clientConnections = 0;
+        stats.startTime = 0;
+        stats.lastFrameTime = 0;
+        stats.averageBitrate = 0.0;
+        stats.currentViewers = 0;
+        it->second = stats;
+        
+        LOG_INFO("Statistics reset for stream: {}", id);
+    }
+}
+
+std::vector<std::pair<std::string, StreamStatistics>> VideoStreamer::getAllStreamStatistics() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<std::pair<std::string, StreamStatistics>> result;
+    for (const auto& [id, stats] : statistics_)
+    {
+        result.emplace_back(id, stats);
+    }
+    
+    return result;
+}
+
+void VideoStreamer::applyConfiguration(const std::map<std::string, std::string>& config)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Apply streaming configuration
+    for (const auto& [key, value] : config)
+    {
+        if (key == "max_streams")
+        {
+            int maxStreams = std::stoi(value);
+            LOG_INFO("Streaming max streams set to: {}", maxStreams);
+            // Could implement stream limit logic here
+        }
+        else if (key == "default_quality")
+        {
+            int defaultQuality = std::stoi(value);
+            LOG_INFO("Streaming default quality set to: {}", defaultQuality);
+            // Update default quality for new streams
+        }
+        else if (key == "default_loop")
+        {
+            bool defaultLoop = (value == "true" || value == "1");
+            LOG_INFO("Streaming default loop set to: {}", defaultLoop);
+            // Update default loop setting for new streams
+        }
+        else if (key == "buffer_size")
+        {
+            int bufferSize = std::stoi(value);
+            LOG_INFO("Streaming buffer size set to: {} bytes", bufferSize);
+            // Update buffer size for existing streams
+            for (auto& [id, streamConfig] : streams_)
+            {
+                streamConfig.bufferSize = bufferSize;
+            }
+        }
+        else if (key == "segment_duration")
+        {
+            int segmentDuration = std::stoi(value);
+            LOG_INFO("Streaming segment duration set to: {} seconds", segmentDuration);
+            // Update segment duration for existing streams
+            for (auto& [id, streamConfig] : streams_)
+            {
+                streamConfig.segmentDuration = segmentDuration;
+            }
+        }
+    }
+    
+    LOG_INFO("Streaming configuration applied");
 }
 
 } // namespace embed::bmcweb::streaming

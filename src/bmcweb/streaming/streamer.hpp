@@ -6,6 +6,7 @@
 #include <mutex>
 #include <functional>
 #include <unordered_map>
+#include <map>
 #include <thread>
 #include <cstdint>
 
@@ -23,6 +24,20 @@ enum class StreamSourceType
 };
 
 /**
+ * @brief Stream statistics
+ */
+struct StreamStatistics
+{
+    uint64_t bytesServed;
+    uint64_t framesServed;
+    uint64_t clientConnections;
+    int64_t startTime;
+    int64_t lastFrameTime;
+    double averageBitrate;
+    int currentViewers;
+};
+
+/**
  * @brief Stream configuration
  */
 struct StreamConfig
@@ -34,6 +49,8 @@ struct StreamConfig
     bool enabled;
     bool loop;
     int quality; // 1-100
+    int bufferSize; // Buffer size in bytes
+    int segmentDuration; // Segment duration in seconds
 };
 
 /**
@@ -88,12 +105,21 @@ class VideoStreamer
     size_t getVideoSize(const std::string& id) const;
     std::string getVideoMimeType(const std::string& id) const;
     
+    // Statistics and monitoring
+    StreamStatistics getStreamStatistics(const std::string& id) const;
+    void resetStreamStatistics(const std::string& id);
+    std::vector<std::pair<std::string, StreamStatistics>> getAllStreamStatistics() const;
+    
+    // Configuration integration
+    void applyConfiguration(const std::map<std::string, std::string>& config);
+    
    private:
     VideoStreamer();
     ~VideoStreamer();
     
     void streamThread(const std::string& id);
     void loadMp4File(const std::string& id);
+    void updateStatistics(const std::string& id, size_t bytesServed);
     
     mutable std::mutex mutex_;
     std::unordered_map<std::string, StreamConfig> streams_;
@@ -101,6 +127,7 @@ class VideoStreamer
     std::unordered_map<std::string, bool> streaming_;
     std::unordered_map<std::string, FrameCallback> frameCallbacks_;
     std::unordered_map<std::string, std::thread> streamThreads_;
+    std::unordered_map<std::string, StreamStatistics> statistics_;
 };
 
 } // namespace embed::bmcweb::streaming

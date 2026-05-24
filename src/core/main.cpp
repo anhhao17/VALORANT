@@ -22,6 +22,7 @@
 #include "bmcweb/hardware/sensor.hpp"
 #include "bmcweb/config/config.hpp"
 #include "bmcweb/user/user.hpp"
+#include "bmcweb/streaming/streamer.hpp"
 
 using namespace embed::bmcweb::http;
 
@@ -163,6 +164,19 @@ int main(int argc, char* argv[])
     
     LOG_INFO("Hardware config - sensor interval: {}ms, temp thresholds: {}/{}, power thresholds: {}/{}", 
              sensorInterval, tempWarning, tempCritical, powerWarning, powerCritical);
+
+    // Initialize streaming service with config values
+    LOG_INFO("Initializing streaming service");
+    auto& streamer = embed::bmcweb::streaming::VideoStreamer::getInstance();
+    
+    // Apply streaming configuration
+    auto streamingConfig = configManager.getStreamingConfig();
+    streamer.applyConfiguration(streamingConfig);
+    
+    bool streamingEnabled = configManager.getBool("streaming.enable", true);
+    int maxStreams = configManager.getInt("streaming.max_streams", 10);
+    
+    LOG_INFO("Streaming config - enabled: {}, max streams: {}", streamingEnabled, maxStreams);
 
     // Create application
     LOG_INFO("Creating application instance");

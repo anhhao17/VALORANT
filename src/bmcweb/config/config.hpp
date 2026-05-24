@@ -46,12 +46,14 @@ public:
     std::map<std::string, std::string> getSystemConfig();
     std::map<std::string, std::string> getHardwareConfig();
     std::map<std::string, std::string> getSecurityConfig();
+    std::map<std::string, std::string> getStreamingConfig();
     
     // Update specific categories
     bool updateNetworkConfig(const std::map<std::string, std::string>& config);
     bool updateSystemConfig(const std::map<std::string, std::string>& config);
     bool updateHardwareConfig(const std::map<std::string, std::string>& config);
     bool updateSecurityConfig(const std::map<std::string, std::string>& config);
+    bool updateStreamingConfig(const std::map<std::string, std::string>& config);
     
     // Get current config path
     std::string getConfigPath() const { return configPath_; }
