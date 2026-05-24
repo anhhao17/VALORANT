@@ -50,6 +50,9 @@ public:
     // Configuration
     void setUseRealHardware(bool useReal);
     bool isUsingRealHardware() const;
+    void setUpdateInterval(int intervalMs);
+    void setTemperatureThresholds(int warning, int critical);
+    void setPowerThresholds(int warning, int critical);
 
 private:
     SensorReader();
@@ -64,6 +67,11 @@ private:
     bool fileExists(const std::string& path);
 
     bool useRealHardware_;
+    int updateIntervalMs_;
+    int tempWarningThreshold_;
+    int tempCriticalThreshold_;
+    int powerWarningThreshold_;
+    int powerCriticalThreshold_;
     std::map<std::string, std::string> sensorPaths_;
 };
 

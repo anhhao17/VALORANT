@@ -27,13 +27,16 @@ using namespace embed::bmcweb::http;
 
 int main(int argc, char* argv[])
 {
-    // Parse command-line arguments for SSL configuration
+    // Initialize configuration first
+    auto& configManager = embed::bmcweb::config::ConfigManager::getInstance();
+    
+    // Parse command-line arguments (these override config file)
     bool use_ssl = false;
     std::string cert_file;
     std::string key_file;
-    unsigned short port = 8080;
+    unsigned short port = 0; // 0 means use config value
     bool use_real_hardware = true;
-    std::string log_level_str = "info";
+    std::string log_level_str = ""; // empty means use config value
     
     for (int i = 1; i < argc; i++)
     {
@@ -41,7 +44,6 @@ int main(int argc, char* argv[])
         if (arg == "--ssl" || arg == "-s")
         {
             use_ssl = true;
-            port = 8443; // Default HTTPS port
         }
         else if (arg == "--cert" && i + 1 < argc)
         {
@@ -67,15 +69,41 @@ int main(int argc, char* argv[])
         {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
-                      << "  --ssl, -s           Enable SSL/TLS (default port: 8443)\n"
+                      << "  --ssl, -s           Enable SSL/TLS (overrides config)\n"
                       << "  --cert <file>       SSL certificate file path\n"
                       << "  --key <file>        SSL private key file path\n"
-                      << "  --port <port>       Server port (default: 8080, 8443 with SSL)\n"
-                      << "  --mock-hardware     Use mock hardware data instead of real sensors\n"
-                      << "  --log-level <level>  Set log level (trace, debug, info, warn, error, critical)\n"
+                      << "  --port <port>       Server port (overrides config)\n"
+                      << "  --mock-hardware     Use mock hardware data (overrides config)\n"
+                      << "  --log-level <level>  Set log level (overrides config)\n"
                       << "  --help, -h          Show this help message\n";
             return 0;
         }
+    }
+    
+    // Read configuration values (use config unless overridden by command line)
+    if (port == 0)
+    {
+        port = configManager.getInt("network.port", 8080);
+    }
+    
+    if (use_ssl)
+    {
+        port = configManager.getInt("network.ssl_port", 8443);
+    }
+    else
+    {
+        use_ssl = configManager.getBool("network.enable_ssl", false);
+    }
+    
+    if (log_level_str.empty())
+    {
+        log_level_str = configManager.getString("system.log_level", "info");
+    }
+    
+    if (use_real_hardware)
+    {
+        // Check if config specifies mock hardware
+        // For now, we keep the command line override
     }
     
     if (use_ssl && (cert_file.empty() || key_file.empty()))
@@ -112,11 +140,29 @@ int main(int argc, char* argv[])
     LOG_INFO("==========================================");
     LOG_INFO("Jetson BMCweb - Minimal Implementation");
     LOG_INFO("==========================================");
+    LOG_INFO("Configuration loaded from: {}", configManager.getConfigPath());
+    LOG_INFO("Using port: {} (SSL: {})", port, use_ssl);
+    LOG_INFO("Log level: {}", log_level_str);
+    LOG_INFO("Hardware mode: {}", use_real_hardware ? "Real" : "Mock");
 
-    // Initialize hardware sensor reader
-    LOG_INFO("Initializing hardware sensor reader (mode: {})", use_real_hardware ? "Real" : "Mock");
+    // Initialize hardware sensor reader with config values
+    LOG_INFO("Initializing hardware sensor reader");
     auto& sensorReader = embed::bmcweb::hardware::SensorReader::getInstance();
     sensorReader.setUseRealHardware(use_real_hardware);
+    
+    // Apply hardware configuration
+    int sensorInterval = configManager.getInt("hardware.sensor_update_interval", 1000);
+    int tempWarning = configManager.getInt("hardware.temperature_threshold_warning", 70);
+    int tempCritical = configManager.getInt("hardware.temperature_threshold_critical", 85);
+    int powerWarning = configManager.getInt("hardware.power_threshold_warning", 20);
+    int powerCritical = configManager.getInt("hardware.power_threshold_critical", 25);
+    
+    sensorReader.setUpdateInterval(sensorInterval);
+    sensorReader.setTemperatureThresholds(tempWarning, tempCritical);
+    sensorReader.setPowerThresholds(powerWarning, powerCritical);
+    
+    LOG_INFO("Hardware config - sensor interval: {}ms, temp thresholds: {}/{}, power thresholds: {}/{}", 
+             sensorInterval, tempWarning, tempCritical, powerWarning, powerCritical);
 
     // Create application
     LOG_INFO("Creating application instance");

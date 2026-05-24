@@ -15,7 +15,9 @@ SensorReader& SensorReader::getInstance()
     return instance;
 }
 
-SensorReader::SensorReader() : useRealHardware_(true)
+SensorReader::SensorReader() : useRealHardware_(true), updateIntervalMs_(1000), 
+                              tempWarningThreshold_(70), tempCriticalThreshold_(85),
+                              powerWarningThreshold_(20), powerCriticalThreshold_(25)
 {
     // Initialize common sensor paths for Jetson devices
     // These paths may vary depending on the specific Jetson model
@@ -308,6 +310,26 @@ void SensorReader::setUseRealHardware(bool useReal)
 bool SensorReader::isUsingRealHardware() const
 {
     return useRealHardware_;
+}
+
+void SensorReader::setUpdateInterval(int intervalMs)
+{
+    updateIntervalMs_ = intervalMs;
+    LOG_INFO("Sensor update interval set to: {}ms", intervalMs);
+}
+
+void SensorReader::setTemperatureThresholds(int warning, int critical)
+{
+    tempWarningThreshold_ = warning;
+    tempCriticalThreshold_ = critical;
+    LOG_INFO("Temperature thresholds set to: {}°C warning, {}°C critical", warning, critical);
+}
+
+void SensorReader::setPowerThresholds(int warning, int critical)
+{
+    powerWarningThreshold_ = warning;
+    powerCriticalThreshold_ = critical;
+    LOG_INFO("Power thresholds set to: {}W warning, {}W critical", warning, critical);
 }
 
 double SensorReader::readTemperatureFile(const std::string& path)

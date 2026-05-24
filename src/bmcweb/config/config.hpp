@@ -52,6 +52,9 @@ public:
     bool updateSystemConfig(const std::map<std::string, std::string>& config);
     bool updateHardwareConfig(const std::map<std::string, std::string>& config);
     bool updateSecurityConfig(const std::map<std::string, std::string>& config);
+    
+    // Get current config path
+    std::string getConfigPath() const { return configPath_; }
 
 private:
     ConfigManager();
