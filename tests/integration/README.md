@@ -1,6 +1,6 @@
-# Common Test Scripts
+# Integration Tests
 
-This directory contains common test scripts for the Jetson BMCweb project.
+This directory contains integration test scripts for the Jetson BMCweb project.
 
 ## Available Test Scripts
 
@@ -8,7 +8,7 @@ This directory contains common test scripts for the Jetson BMCweb project.
 Tests all API endpoints to verify functionality.
 
 ```bash
-./common/test-api.py
+./tests/integration/test-api.py
 ```
 
 **What it does:**
@@ -25,7 +25,7 @@ See `TEST_API_README.md` for detailed testing instructions.
 Tests authentication endpoints and session management.
 
 ```bash
-./common/test_auth.py
+./tests/integration/test_auth.py
 ```
 
 **What it does:**
@@ -39,7 +39,7 @@ Tests authentication endpoints and session management.
 Tests WebSocket connections and real-time data streaming.
 
 ```bash
-./common/test_websocket.py
+./tests/integration/test_websocket.py
 ```
 
 **What it does:**
@@ -63,9 +63,9 @@ Make sure the server is running before executing test scripts:
 ./build/jetson
 
 # In another terminal, run tests
-./common/test-api.py
-./common/test_auth.py
-./common/test_websocket.py
+./tests/integration/test-api.py
+./tests/integration/test_auth.py
+./tests/integration/test_websocket.py
 ```
 
 ## Test Results

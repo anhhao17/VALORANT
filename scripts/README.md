@@ -25,7 +25,7 @@ Builds the Jetson BMCweb C++ application.
 Tests all API endpoints to verify functionality.
 
 ```bash
-./common/test-api.py
+./tests/integration/test-api.py
 ```
 
 **What it does:**
@@ -36,20 +36,20 @@ Tests all API endpoints to verify functionality.
 5. Tests error cases (404, 401)
 6. Reports test results with pass/fail counts
 
-See `common/TEST_API_README.md` for detailed testing instructions.
+See `tests/integration/TEST_API_README.md` for detailed testing instructions.
 
 ### `test_auth.py` - Test Authentication
 Tests authentication endpoints and session management.
 
 ```bash
-./common/test_auth.py
+./tests/integration/test_auth.py
 ```
 
 ### `test_websocket.py` - Test WebSocket
 Tests WebSocket connections and real-time data streaming.
 
 ```bash
-./common/test_websocket.py
+./tests/integration/test_websocket.py
 ```
 
 ## Running the Application
@@ -76,7 +76,7 @@ The server will start on `http://localhost:8080` with default credentials:
 ./build/jetson
 
 # In another terminal, test the API
-./common/test-api.py
+./tests/integration/test-api.py
 ```
 
 ### Debug Build
