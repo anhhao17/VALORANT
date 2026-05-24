@@ -75,7 +75,7 @@ class Trie
         {
             if (current->children.find(c) == current->children.end())
             {
-                return {0, params};  // No match
+                return {0, params};  // No match - character not found
             }
             current = current->children[c];
         }

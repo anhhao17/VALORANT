@@ -219,25 +219,11 @@ inline void requestRoutes(App& app)
     std::vector<std::filesystem::directory_entry> paths(
         std::filesystem::begin(dirIter), std::filesystem::end(dirIter));
 
-    // Sort to ensure index.html is processed first (for "/" route)
+    // Sort by path length (longest first) to avoid trie conflicts
     std::ranges::sort(
         paths,
         [](const std::filesystem::directory_entry& a, const std::filesystem::directory_entry& b) {
-            std::string aName = a.path().filename().string();
-            std::string bName = b.path().filename().string();
-
-            // Prioritize index.html
-            if (aName.starts_with("index.") && aName.ends_with(".html"))
-            {
-                return true;
-            }
-            if (bName.starts_with("index.") && bName.ends_with(".html"))
-            {
-                return false;
-            }
-
-            // Otherwise sort by path length (shorter paths first)
-            return a.path().string().length() < b.path().string().length();
+            return a.path().string().length() > b.path().string().length();
         });
 
     for (const std::filesystem::directory_entry& dir : paths)

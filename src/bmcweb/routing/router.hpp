@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -51,14 +52,28 @@ class Router
      */
     void validate()
     {
-        for (auto& rule : allRules_)
+        // Sort routes by length (longest first) to ensure exact matching works correctly
+        std::vector<std::pair<std::string, unsigned int>> routes;
+        for (size_t i = 0; i < allRules_.size(); i++)
         {
-            if (rule)
+            if (allRules_[i])
             {
-                rule->validate();
-                trie_.add(rule->getRule(), static_cast<unsigned int>(allRules_.size()));
+                allRules_[i]->validate();
+                routes.push_back({allRules_[i]->getRule(), static_cast<unsigned int>(i + 1)});
             }
         }
+        
+        // Sort by length (longest first)
+        std::ranges::sort(routes, [](const auto& a, const auto& b) {
+            return a.first.length() > b.first.length();
+        });
+        
+        // Add to trie in sorted order
+        for (const auto& route : routes)
+        {
+            trie_.add(route.first, route.second);
+        }
+        
         trie_.validate();
     }
 
