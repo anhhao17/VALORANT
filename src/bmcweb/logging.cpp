@@ -73,6 +73,15 @@ std::shared_ptr<spdlog::logger> getLogger()
     return g_logger;
 }
 
+spdlog::level::level_enum getCurrentLogLevel()
+{
+    if (g_logger)
+    {
+        return g_logger->level();
+    }
+    return spdlog::level::info;
+}
+
 void setLogLevel(spdlog::level::level_enum level)
 {
     if (g_logger)

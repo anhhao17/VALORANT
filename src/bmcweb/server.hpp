@@ -42,18 +42,15 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
     explicit HttpSession(tcp::socket socket, App& app) 
         : stream_(std::move(socket)), app_(app), use_ssl_(false)
     {
-        LOG_DEBUG("New HTTP session created");
     }
     
     explicit HttpSession(ssl::stream<tcp::socket> ssl_socket, App& app) 
         : ssl_stream_(std::move(ssl_socket)), app_(app), use_ssl_(true)
     {
-        LOG_DEBUG("New HTTPS session created");
     }
 
     ~HttpSession()
     {
-        LOG_DEBUG("HTTP session destroyed");
     }
 
     void run();

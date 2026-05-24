@@ -29,6 +29,7 @@ int main(int argc, char* argv[])
     std::string key_file;
     unsigned short port = 8080;
     bool use_real_hardware = true;
+    std::string log_level_str = "info";
     
     for (int i = 1; i < argc; i++)
     {
@@ -54,6 +55,10 @@ int main(int argc, char* argv[])
         {
             use_real_hardware = false;
         }
+        else if (arg == "--log-level" && i + 1 < argc)
+        {
+            log_level_str = argv[++i];
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout << "Usage: " << argv[0] << " [options]\n"
@@ -63,6 +68,7 @@ int main(int argc, char* argv[])
                       << "  --key <file>        SSL private key file path\n"
                       << "  --port <port>       Server port (default: 8080, 8443 with SSL)\n"
                       << "  --mock-hardware     Use mock hardware data instead of real sensors\n"
+                      << "  --log-level <level>  Set log level (trace, debug, info, warn, error, critical)\n"
                       << "  --help, -h          Show this help message\n";
             return 0;
         }
@@ -75,8 +81,29 @@ int main(int argc, char* argv[])
         return 1;
     }
     
+    // Parse log level
+    spdlog::level::level_enum log_level = spdlog::level::info;
+    if (log_level_str == "trace")
+        log_level = spdlog::level::trace;
+    else if (log_level_str == "debug")
+        log_level = spdlog::level::debug;
+    else if (log_level_str == "info")
+        log_level = spdlog::level::info;
+    else if (log_level_str == "warn")
+        log_level = spdlog::level::warn;
+    else if (log_level_str == "error")
+        log_level = spdlog::level::err;
+    else if (log_level_str == "critical")
+        log_level = spdlog::level::critical;
+    else
+    {
+        std::cerr << "Error: Invalid log level '" << log_level_str << "'\n";
+        std::cerr << "Valid levels: trace, debug, info, warn, error, critical\n";
+        return 1;
+    }
+    
     // Initialize logging
-    embed::bmcweb::initLogging(spdlog::level::info, "jetson.log");
+    embed::bmcweb::initLogging(log_level, "jetson.log");
 
     LOG_INFO("==========================================");
     LOG_INFO("Jetson BMCweb - Minimal Implementation");

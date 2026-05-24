@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <type_traits>
+#include <spdlog/spdlog.h>
 
 namespace embed::bmcweb
 {
@@ -17,7 +18,6 @@ namespace embed::bmcweb
 
 void HttpSession::run()
 {
-    LOG_DEBUG("Starting HTTP session");
     // Read the request
     if (use_ssl_)
     {
@@ -37,7 +37,6 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
 {
     if (ec == http::error::end_of_stream)
     {
-        LOG_DEBUG("HTTP session ended by client");
         return;
     }
 
@@ -47,35 +46,36 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
         return;
     }
 
-    // Log complete request details for debugging
-    LOG_DEBUG("========== REQUEST START ==========");
-    LOG_DEBUG("Method: {}", std::string(req.method_string()));
-    LOG_DEBUG("Target: {}", std::string(req.target()));
-    LOG_DEBUG("HTTP Version: {}.{}", req.version() / 10, req.version() % 10);
+    // Log the HTTP request (method and target only)
+    LOG_DEBUG("{} {}", std::string(req.method_string()), std::string(req.target()));
 
-    // Log all headers
-    LOG_DEBUG("Headers:");
-    for (const auto& field : req)
+    // Log complete request details for debugging (only in trace mode)
+    if (embed::bmcweb::getCurrentLogLevel() == spdlog::level::trace)
     {
-        LOG_DEBUG("  {}: {}", std::string(field.name_string()), std::string(field.value()));
-    }
+        LOG_TRACE("========== REQUEST START ==========");
+        LOG_TRACE("Method: {}", std::string(req.method_string()));
+        LOG_TRACE("Target: {}", std::string(req.target()));
+        LOG_TRACE("HTTP Version: {}.{}", req.version() / 10, req.version() % 10);
 
-    // Log body if present
-    if (!req.body().empty())
-    {
-        LOG_DEBUG("Body: {}", req.body());
-    }
-    else
-    {
-        LOG_DEBUG("Body: (empty)");
-    }
+        // Log all headers
+        LOG_TRACE("Headers:");
+        for (const auto& field : req)
+        {
+            LOG_TRACE("  {}: {}", std::string(field.name_string()), std::string(field.value()));
+        }
 
-    LOG_DEBUG("========== REQUEST END ==========");
+        // Log body if present
+        if (!req.body().empty())
+        {
+            LOG_TRACE("Body: {}", req.body());
+        }
+        LOG_TRACE("========== REQUEST END ==========");
+    }
 
     // Check for WebSocket upgrade request
     if (websocket::is_upgrade(req))
     {
-        LOG_INFO("WebSocket upgrade request detected");
+        LOG_DEBUG("WebSocket upgrade request: {}", std::string(req.target()));
         
         // Validate WebSocket upgrade before proceeding
         if (!validateWebSocketUpgrade())

@@ -28,6 +28,13 @@ void initLogging(spdlog::level::level_enum logLevel = spdlog::level::info,
 std::shared_ptr<spdlog::logger> getLogger();
 
 /**
+ * @brief Get the current log level
+ * 
+ * @return Current log level
+ */
+spdlog::level::level_enum getCurrentLogLevel();
+
+/**
  * @brief Set the log level
  * 
  * @param level New log level
