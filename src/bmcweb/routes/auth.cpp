@@ -3,10 +3,10 @@
 #include "../logging.hpp"
 #include <boost/beast/http/field.hpp>
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb::http;
 
 // Simple password validation (in production, use proper password hashing)
 bool validateCredentials(const std::string& username, const std::string& password)
@@ -40,6 +40,7 @@ void registerAuthRoutes(App& app)
                 {
                     LOG_WARN("Login failed for user: {}", username);
                     asyncResp->res.result(status::unauthorized);
+                    asyncResp->res.set(field::content_type, "application/json");
                     asyncResp->res.body("{\"error\":\"Invalid credentials\"}");
                     return;
                 }
@@ -55,6 +56,7 @@ void registerAuthRoutes(App& app)
                 response["username"] = session->username;
 
                 asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body(response.dump());
 
                 // Set SESSION cookie
@@ -67,6 +69,7 @@ void registerAuthRoutes(App& app)
             {
                 LOG_ERROR("Login error: {}", e.what());
                 asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Invalid request\"}");
             }
         });
@@ -121,6 +124,7 @@ void registerAuthRoutes(App& app)
                 }
 
                 asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"message\":\"Logged out successfully\"}");
 
                 // Clear SESSION cookie
@@ -131,6 +135,7 @@ void registerAuthRoutes(App& app)
             {
                 LOG_ERROR("Logout error: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
@@ -176,6 +181,7 @@ void registerAuthRoutes(App& app)
                 if (sessionToken.empty())
                 {
                     asyncResp->res.result(status::unauthorized);
+                    asyncResp->res.set(field::content_type, "application/json");
                     asyncResp->res.body("{\"error\":\"No session found\"}");
                     return;
                 }
@@ -186,6 +192,7 @@ void registerAuthRoutes(App& app)
                 if (!session)
                 {
                     asyncResp->res.result(status::unauthorized);
+                    asyncResp->res.set(field::content_type, "application/json");
                     asyncResp->res.body("{\"error\":\"Invalid or expired session\"}");
                     return;
                 }
@@ -195,15 +202,17 @@ void registerAuthRoutes(App& app)
                 response["uniqueId"] = session->uniqueId;
 
                 asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body(response.dump());
             }
             catch (const std::exception& e)
             {
                 LOG_ERROR("Session info error: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
 }
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

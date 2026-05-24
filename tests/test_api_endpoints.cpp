@@ -8,8 +8,8 @@
 #include "bmcweb/routes/auth.hpp"
 #include <nlohmann/json.hpp>
 
-using namespace jetson::bmcweb;
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb;
+using namespace embed::bmcweb::http;
 
 class ApiEndpointsTest : public ::testing::Test
 {

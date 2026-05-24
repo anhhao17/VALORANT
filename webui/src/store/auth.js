@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+
 export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = ref(false)
   const user = ref(null)
@@ -8,7 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   const csrfToken = ref('')
 
   function login(username, password) {
-    return fetch('/api/login', {
+    return fetch(`${API_BASE_URL}/api/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -31,7 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
-    return fetch('/api/logout', {
+    return fetch(`${API_BASE_URL}/api/logout`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function checkSession() {
-    return fetch('/api/session', {
+    return fetch(`${API_BASE_URL}/api/session`, {
       method: 'GET',
       headers: {
         'Authorization': `Token ${sessionToken.value}`,

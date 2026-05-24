@@ -4,7 +4,7 @@
 #include <boost/beast/http.hpp>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 /**
@@ -69,4 +69,4 @@ class HttpRequest
 // Type alias for convenience
 using Request = HttpRequest;
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

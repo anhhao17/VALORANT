@@ -12,6 +12,9 @@ This project implements a minimal version of the bmcweb architecture, providing:
 - API endpoints for system and hardware monitoring
 - Async response handling
 - HTTP request/response wrappers
+- WebSocket support for real-time sensor streaming
+- SSL/TLS support for secure connections (HTTPS/WSS)
+- Session-based authentication with cookies
 - Clean, proven architecture patterns
 
 ## Current Status
@@ -31,12 +34,18 @@ This project implements a minimal version of the bmcweb architecture, providing:
 - Comprehensive logging with spdlog
 - API endpoints (system info, hardware monitoring)
 
+**Phase 3: WebSocket & Security** ✅
+- WebSocket support for real-time sensor streaming
+- WebSocket upgrade on HTTP (same port)
+- SSL/TLS support for HTTPS/WSS
+- WebSocket security validation (headers, protocol, token)
+- Session-based authentication with cookies
+- Integration test suite
+
 **Next Steps:**
-- Add Vue 3 UI
-- Implement streaming functionality
 - Add comprehensive hardware monitoring integration
 - Implement JWT-based authentication
-- Add WebSocket support
+- Add more WebSocket data streaming features
 
 ## Building
 
@@ -53,17 +62,44 @@ npm run build
 ## Running
 
 ```bash
-# Terminal 1: Start backend
+# Terminal 1: Start backend (HTTP)
 ./build/jetson
+
+# Terminal 1: Start backend (HTTPS with SSL)
+./build/jetson --ssl --cert cert.pem --key key.pem
+
+# Terminal 1: Start backend on custom port
+./build/jetson --port 9000
 
 # Terminal 2: Start frontend (development mode)
 cd webui
 npm run dev
 ```
 
-The backend server will start on `http://localhost:8080` with the following default credentials:
+The backend server will start on `http://localhost:8080` (or `https://localhost:8443` with SSL) with the following default credentials:
 - Username: `admin`
 - Password: `password`
+
+### SSL/TLS Configuration
+
+To enable SSL/TLS for secure connections:
+1. Generate SSL certificates:
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+```
+
+2. Start the server with SSL:
+```bash
+./build/jetson --ssl --cert cert.pem --key key.pem
+```
+
+### Command Line Options
+
+- `--ssl, -s` - Enable SSL/TLS (default port: 8443)
+- `--cert <file>` - SSL certificate file path
+- `--key <file>` - SSL private key file path
+- `--port <port>` - Server port (default: 8080, 8443 with SSL)
+- `--help, -h` - Show help message
 
 The frontend development server will start on `http://localhost:5173` with hot reload enabled.
 
@@ -71,15 +107,38 @@ The application will create a log file `jetson.log` in the current directory wit
 
 ## Testing
 
-API endpoints can be tested using the provided test script:
+The project includes both unit tests and integration tests:
 
+### Unit Tests (C++)
 ```bash
-./scripts/test-api.py
+# Build with tests enabled
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake --build build
+
+# Run unit tests
+cd build
+ctest --output-on-failure
 ```
 
-See `scripts/TEST_API_README.md` for detailed testing instructions.
+### Integration Tests (Python)
+```bash
+# Start the server
+./build/jetson
+
+# Run integration tests in another terminal
+./tests/integration/test-api.py
+./tests/integration/test_auth.py
+./tests/integration/test_websocket.py
+```
+
+See `tests/integration/README.md` for detailed testing instructions.
 
 ## API Endpoints
+
+### Authentication Endpoints
+- `POST /api/login` - User login with session creation
+- `POST /api/logout` - User logout with session cleanup
+- `GET /api/session` - Get current session information
 
 ### System Endpoints
 - `GET /api/system/info` - System information
@@ -92,8 +151,11 @@ See `scripts/TEST_API_README.md` for detailed testing instructions.
 - `GET /api/hwmon/fans` - Fan speeds
 - `GET /api/hwmon/voltage` - Voltage sensors
 
-### Test Endpoint
-- `GET /api/test` - Test endpoint
+### WebSocket Endpoints
+- `GET /ws` - WebSocket endpoint for real-time sensor streaming
+  - Requires WebSocket upgrade headers
+  - Supports protocol negotiation (view types, tokens)
+  - Validates authentication before connection
 
 ## Architecture
 
@@ -105,6 +167,9 @@ Following bmcweb patterns:
 - **AsyncResp**: Async response handling
 - **Request/Response**: HTTP wrappers around Boost.Beast
 - **Server**: Multi-threaded HTTP server with Boost.Beast
+- **WebSocket**: Real-time sensor streaming with security validation
+- **Session**: Session-based authentication with cookie management
+- **SSL/TLS**: Secure connections support (HTTPS/WSS)
 
 ## Project Structure
 
@@ -116,6 +181,11 @@ src/
 │   ├── logging.hpp          # Logging system interface
 │   ├── logging.cpp          # Logging system implementation
 │   ├── server.hpp           # HTTP server implementation
+│   ├── server.cpp           # Server implementation with SSL/WebSocket
+│   ├── session.hpp          # Session management
+│   ├── session.cpp          # Session implementation
+│   ├── websocket.hpp        # WebSocket implementation
+│   ├── websocket.cpp        # WebSocket implementation
 │   ├── http/
 │   │   ├── types.hpp        # HTTP type aliases
 │   │   ├── request.hpp      # Request wrapper
@@ -131,19 +201,61 @@ src/
 │   │   └── auth.hpp         # Authentication middleware
 │   └── routes/
 │       ├── system.hpp       # System API routes
-│       └── hwmon.hpp        # Hardware monitoring routes
+│       ├── system.cpp       # System implementation
+│       ├── hwmon.hpp        # Hardware monitoring routes
+│       ├── hwmon.cpp        # Hardware monitoring implementation
+│       ├── auth.hpp         # Authentication routes
+│       ├── auth.cpp         # Authentication implementation
+│       └── websocket.hpp    # WebSocket routes
 └── core/
-    └── main.cpp             # Application entry
+    └── main.cpp             # Application entry with SSL options
+
+tests/
+├── integration/             # Python integration tests
+│   ├── test-api.py         # API endpoint tests
+│   ├── test_auth.py        # Authentication tests
+│   ├── test_websocket.py   # WebSocket tests
+│   └── README.md           # Integration test documentation
+├── CMakeLists.txt          # C++ test build configuration
+├── test_routing.cpp        # C++ unit tests
+├── test_http_wrappers.cpp  # C++ unit tests
+├── test_middleware.cpp     # C++ unit tests
+└── test_api_endpoints.cpp  # C++ unit tests
 ```
 
 ## Dependencies
 
 - C++20
-- Boost 1.83+ (system, filesystem, beast, asio)
+- Boost 1.83+ (system, filesystem, beast, asio, iostreams)
+- OpenSSL (SSL/TLS support)
 - nlohmann/json 3.11+
 - spdlog 1.10+ (logging)
 - CMake 3.15+
 - pthread (threading)
+- Python 3.6+ (for integration tests)
+- requests (Python library for testing)
+- websockets (Python library for testing)
+
+## CI/CD
+
+The project includes GitHub Actions CI pipeline that:
+- Builds the application on Ubuntu
+- Runs C++ unit tests via CTest
+- Runs Python integration tests
+- Builds Vue UI
+- Creates deployment packages
+- Runs on push to main/develop branches and pull requests
+
+## Security Features
+
+- **SSL/TLS Support**: Secure connections for HTTPS/WSS
+- **Session-based Authentication**: Cookie-based session management
+- **WebSocket Security**: 
+  - Header validation (Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version)
+  - Protocol validation (view types, token requirements)
+  - Token-based authentication before connection
+- **CORS Middleware**: Configurable cross-origin resource sharing
+- **Authentication Middleware**: Route-level access control
 
 ## License
 

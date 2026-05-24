@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 /**
@@ -108,4 +108,4 @@ class HttpResponse
 // Type alias for convenience
 using Response = HttpResponse;
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

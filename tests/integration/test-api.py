@@ -9,6 +9,7 @@ import json
 import sys
 import time
 from typing import Dict, Any, Optional
+from test_auth import AuthTester, run_auth_tests
 
 # Configuration
 HOST = "localhost"
@@ -43,20 +44,24 @@ def test_endpoint(
     expected_status: int,
     use_auth: bool = True,
     method: str = "GET",
-    data: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None
 ) -> Optional[Dict[str, Any]]:
     """Test an API endpoint"""
     url = f"{BASE_URL}{endpoint}"
     
     try:
+        auth = AUTH if use_auth else None
+        req_headers = headers or {}
+        
         if method == "GET":
-            response = requests.get(url, auth=AUTH if use_auth else None)
+            response = requests.get(url, auth=auth, headers=req_headers)
         elif method == "POST":
-            response = requests.post(url, auth=AUTH if use_auth else None, json=data)
+            response = requests.post(url, auth=auth, json=data, headers=req_headers)
         elif method == "PUT":
-            response = requests.put(url, auth=AUTH if use_auth else None, json=data)
+            response = requests.put(url, auth=auth, json=data, headers=req_headers)
         elif method == "DELETE":
-            response = requests.delete(url, auth=AUTH if use_auth else None)
+            response = requests.delete(url, auth=auth, headers=req_headers)
         else:
             print_result(test_name, "FAIL", f"Unsupported method: {method}")
             return None
@@ -140,43 +145,55 @@ def main():
     
     print()
     
-    # Test authentication
-    print("Testing authentication...")
-    test_endpoint("Test endpoint without auth", "/api/test", 401, use_auth=False)
-    test_endpoint_with_json_validation(
-        "Test endpoint with auth", "/api/test", 200, "message", use_auth=True
-    )
+    # Test authentication using reusable module
+    print("Testing authentication endpoints...")
+    auth_results = run_auth_tests(BASE_URL)
+    
+    for test_name, passed in auth_results.items():
+        status = "PASS" if passed else "FAIL"
+        print_result(f"Auth: {test_name}", status)
     
     print()
-    print("Testing system endpoints...")
+    print("Testing system endpoints with authentication...")
     
-    # System endpoints
-    test_endpoint_with_json_validation(
-        "System info", "/api/system/info", 200, "hostname"
-    )
-    test_endpoint_with_json_validation(
-        "System status", "/api/system/status", 200, "health"
-    )
-    test_endpoint_with_json_validation(
-        "System reboot", "/api/system/reboot", 202, "message"
-    )
+    # Test system endpoints using AuthTester
+    auth = AuthTester(BASE_URL)
+    login_success, _ = auth.login()
+    
+    if login_success:
+        # Test authenticated system endpoints
+        success, data = auth.make_authenticated_request("GET", "/api/system/info")
+        print_result("System info with auth", "PASS" if success else "FAIL")
+        
+        success, data = auth.make_authenticated_request("GET", "/api/system/status")
+        print_result("System status with auth", "PASS" if success else "FAIL")
+        
+        success, data = auth.make_authenticated_request("POST", "/api/system/reboot")
+        print_result("System reboot with auth", "PASS" if success else "FAIL")
+        
+        auth.logout()
+    else:
+        print_result("Login for system endpoint tests", "FAIL")
     
     print()
-    print("Testing hardware monitoring endpoints...")
+    print("Testing hardware monitoring endpoints with authentication...")
     
-    # Hardware monitoring endpoints
-    test_endpoint_with_json_validation(
-        "Temperature sensors", "/api/hwmon/temperature", 200, "cpu"
-    )
-    test_endpoint_with_json_validation(
-        "Power sensors", "/api/hwmon/power", 200, "total"
-    )
-    test_endpoint_with_json_validation(
-        "Fan speeds", "/api/hwmon/fans", 200, "fan1"
-    )
-    test_endpoint_with_json_validation(
-        "Voltage sensors", "/api/hwmon/voltage", 200, "vdd_cpu"
-    )
+    # Test hardware endpoints using AuthTester
+    auth.login()
+    
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/temperature")
+    print_result("Temperature with auth", "PASS" if success else "FAIL")
+    
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/power")
+    print_result("Power with auth", "PASS" if success else "FAIL")
+    
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/fans")
+    print_result("Fans with auth", "PASS" if success else "FAIL")
+    
+    success, data = auth.make_authenticated_request("GET", "/api/hwmon/voltage")
+    print_result("Voltage with auth", "PASS" if success else "FAIL")
+    
+    auth.logout()
     
     print()
     print("Testing error cases...")

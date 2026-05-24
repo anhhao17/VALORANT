@@ -34,12 +34,18 @@ jobs:
           nlohmann-json3-dev \
           clang-format \
           nodejs \
-          npm
+          npm \
+          python3 \
+          python3-pip
 
     - name: Install Node dependencies
       run: |
         cd webui
         npm install
+
+    - name: Install Python dependencies
+      run: |
+        pip3 install --break-system-packages requests websockets
 
     - name: Build Vue UI
       run: |
@@ -54,10 +60,37 @@ jobs:
       run: |
         cmake --build build -- -j$(nproc)
 
-    - name: Run tests
+    - name: Run unit tests
       run: |
         cd build
         ctest --output-on-failure
+
+    - name: Start server for integration tests
+      run: |
+        ./build/jetson &
+        SERVER_PID=$!
+        echo "Server PID: $SERVER_PID"
+        
+        # Wait for server to be ready
+        for i in {1..30}; do
+          if curl -s http://localhost:8080/ > /dev/null 2>&1; then
+            echo "Server is ready"
+            break
+          fi
+          echo "Waiting for server... ($i/30)"
+          sleep 1
+        done
+
+    - name: Run integration tests
+      run: |
+        python3 tests/integration/test-api.py
+        python3 tests/integration/test_auth.py
+        python3 tests/integration/test_websocket.py
+
+    - name: Stop server
+      if: always()
+      run: |
+        pkill -f "jetson" || true
 
     - name: Compute version
       id: version

@@ -14,7 +14,7 @@
 #include "taggedrule.hpp"
 #include "trie.hpp"
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace routing
@@ -128,4 +128,4 @@ class Router
 };
 
 }  // namespace routing
-}  // namespace jetson::bmcweb
+}  // namespace embed::bmcweb

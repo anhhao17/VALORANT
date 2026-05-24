@@ -25,7 +25,7 @@ Builds the Jetson BMCweb C++ application.
 Tests all API endpoints to verify functionality.
 
 ```bash
-./scripts/test-api.py
+./tests/integration/test-api.py
 ```
 
 **What it does:**
@@ -36,20 +36,53 @@ Tests all API endpoints to verify functionality.
 5. Tests error cases (404, 401)
 6. Reports test results with pass/fail counts
 
-See `TEST_API_README.md` for detailed testing instructions.
+See `tests/integration/TEST_API_README.md` for detailed testing instructions.
+
+### `test_auth.py` - Test Authentication
+Tests authentication endpoints and session management.
+
+```bash
+./tests/integration/test_auth.py
+```
+
+### `test_websocket.py` - Test WebSocket
+Tests WebSocket connections and real-time data streaming.
+
+```bash
+./tests/integration/test_websocket.py
+```
 
 ## Running the Application
 
 After building:
 
 ```bash
-# Run the application
+# Run the application (HTTP)
 ./build/jetson
+
+# Run with SSL/TLS (HTTPS)
+./build/jetson --ssl --cert cert.pem --key key.pem
+
+# Run on custom port
+./build/jetson --port 9000
 ```
 
-The server will start on `http://localhost:8080` with default credentials:
+The server will start on `http://localhost:8080` (or `https://localhost:8443` with SSL) with default credentials:
 - Username: `admin`
 - Password: `password`
+
+### SSL/TLS Configuration
+
+To enable SSL/TLS for secure connections:
+1. Generate SSL certificates:
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+```
+
+2. Start the server with SSL:
+```bash
+./build/jetson --ssl --cert cert.pem --key key.pem
+```
 
 ## Development Workflow
 
@@ -62,7 +95,7 @@ The server will start on `http://localhost:8080` with default credentials:
 ./build/jetson
 
 # In another terminal, test the API
-./scripts/test-api.py
+./tests/integration/test-api.py
 ```
 
 ### Debug Build
@@ -78,7 +111,9 @@ The server will start on `http://localhost:8080` with default credentials:
 
 - CMake 3.15+
 - C++20 compatible compiler
-- Boost 1.83+ (system, filesystem, beast, asio)
+- Boost 1.83+ (system, filesystem, beast, asio, iostreams)
+- OpenSSL (SSL/TLS support)
 - nlohmann/json 3.11+
 - Python 3.6+ (for testing)
 - requests library (for testing): `pip install requests`
+- websockets library (for testing): `pip install websockets`

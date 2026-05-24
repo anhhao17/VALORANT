@@ -7,10 +7,10 @@
 #include <functional>
 #include <memory>
 
-namespace jetson::bmcweb::middleware
+namespace embed::bmcweb::middleware
 {
 
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb::http;
 
 /**
  * @brief Middleware function signature
@@ -101,4 +101,4 @@ MiddlewareFunction makeMiddlewareFunction(std::shared_ptr<M> middleware)
     };
 }
 
-} // namespace jetson::bmcweb::middleware
+} // namespace embed::bmcweb::middleware

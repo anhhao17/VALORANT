@@ -2,7 +2,7 @@
 #include "logging.hpp"
 #include <array>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 std::shared_ptr<UserSession> SessionStore::generateUserSession(
@@ -123,4 +123,4 @@ void SessionStore::applySessionTimeouts()
     }
 }
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

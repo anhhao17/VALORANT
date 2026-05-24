@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace routing
@@ -100,4 +100,4 @@ class TaggedRule<> : public BaseRule
 };
 
 } // namespace routing
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

@@ -4,7 +4,7 @@
 #include "bmcweb/http/request.hpp"
 #include "bmcweb/http/response.hpp"
 
-using namespace jetson::bmcweb;
+using namespace embed::bmcweb;
 
 class RoutingTest : public ::testing::Test
 {

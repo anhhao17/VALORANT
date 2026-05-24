@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 /**
@@ -83,4 +83,4 @@ class App
 // Route registration macro following bmcweb pattern
 #define JETSON_ROUTE(app, url) app.route<>(url)
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

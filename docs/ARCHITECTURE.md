@@ -44,6 +44,15 @@ This document describes the architecture of the Jetson BMCweb minimal implementa
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │   HTTP       │  │ Connection   │  │   WebSocket  │      │
 │  │   Server     │  │  Manager     │  │   Support    │      │
+│  │  (SSL/TLS)   │  │              │  │  (Security)  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      Session Layer                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Session    │  │   Cookie     │  │   Token      │      │
+│  │   Manager    │  │  Management  │  │  Validation  │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -97,9 +106,20 @@ This document describes the architecture of the Jetson BMCweb minimal implementa
 - **Responsibilities**:
   - HTTP server implementation
   - Connection lifecycle management
-  - WebSocket upgrade handling
-  - SSL/TLS support
+  - WebSocket upgrade handling with security validation
+  - SSL/TLS support for HTTPS/WSS
   - Connection pooling
+  - Dual-mode HTTP/HTTPS and WS/WSS support
+
+### Session Layer
+- **Purpose**: User session management and authentication
+- **Responsibilities**:
+  - Session creation and validation
+  - Cookie-based session management
+  - Token generation and validation
+  - Session lifecycle management
+  - CSRF token generation
+  - Session cleanup and expiration
 
 ### I/O Layer
 - **Purpose**: Low-level I/O operations and event loop
@@ -191,6 +211,59 @@ This document describes the architecture of the Jetson BMCweb minimal implementa
 │                     I/O Layer (Return)                      │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  Data written to socket via Boost::Asio               │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓
+┌─────────────┐
+│   Client    │
+└─────────────┘
+```
+
+## WebSocket Security Flow
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ WebSocket Upgrade Request
+       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   Server Layer                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Detect WebSocket upgrade headers                    │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓
+┌─────────────────────────────────────────────────────────────┐
+│              WebSocket Security Validation                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  1. Validate WebSocket headers                      │  │
+│  │     - Upgrade: websocket                              │  │
+│  │     - Connection: keep-alive                           │  │
+│  │     - Sec-WebSocket-Key: present                      │  │
+│  │     - Sec-WebSocket-Version: 13                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  2. Validate WebSocket protocol                       │  │
+│  │     - Sec-WebSocket-Protocol header                   │  │
+│  │     - Required: view=type, token=value               │  │
+│  │     - Valid view types: cl_view, ir_view, etc.        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  3. Validate authentication token                     │  │
+│  │     - Check Authorization header (Bearer token)        │  │
+│  │     - Check Cookie header (session_token)             │  │
+│  │     - Validate against session store                 │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓ (if validation passes)
+┌─────────────────────────────────────────────────────────────┐
+│              WebSocket Connection Established              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  WebSocket session created                            │  │
+│  │  Session ID generated                                 │  │
+│  │  Added to WebSocket manager                           │  │
+│  │  Real-time sensor streaming enabled                    │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
        ↓
@@ -314,19 +387,78 @@ Persistent WebSocket Communication
 ┌─────────────────────────────────────────────────────────────┐
 │                   Security Layers                           │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Application: Role-based access control               │  │
+│  │  Application: Route-level access control               │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Middleware: JWT token validation                     │  │
+│  │  Middleware: Session-based authentication              │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Server: SSL/TLS encryption                          │  │
+│  │  Server: SSL/TLS encryption (HTTPS/WSS)                │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  WebSocket: Header/protocol/token validation        │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  I/O: Secure socket handling                         │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Authentication Flow
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ POST /api/login
+       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                Middleware Layer                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Auth middleware validates credentials                 │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                Session Layer                               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Session created with unique token                    │  │
+│  │  CSRF token generated                                │  │
+│  │  Session stored in session store                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   HTTP Layer (Return)                        │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Response with session token + CSRF token              │  │
+│  │  Set-Cookie header for session persistence              │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+       ↓
+┌─────────────┐
+│   Client    │
+└─────────────┘
+```
+
+### WebSocket Security Details
+
+**Header Validation:**
+- `Upgrade: websocket` - Must be present and correct
+- `Connection: keep-alive` - Required for persistent connections
+- `Sec-WebSocket-Key: <base64>` - Required for handshake
+- `Sec-WebSocket-Version: 13` - Must be version 13
+
+**Protocol Validation:**
+- `Sec-WebSocket-Protocol: view=<type>, token=<value>` - Required
+- Valid view types: `cl_view`, `ir_view`, `both_views`, `cl_sub_view`, `ir_sub_view`, `both_sub_views`
+- Token must be valid session token
+
+**Authentication Validation:**
+- Check `Authorization: Bearer <token>` header
+- Check `Cookie: session_token=<token>` header
+- Validate token against session store
+- Reject if token invalid or missing
 
 ## Performance Considerations
 
@@ -352,7 +484,7 @@ Persistent WebSocket Communication
 │                   Horizontal Scaling                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │  Instance 1  │  │  Instance 2  │  │  Instance N  │      │
-│  │  (Port 8080) │  │  (Port 8081) │  │  (Port 808N) │      │
+│  │  (Port 8080) │  │  (Port 8080) │  │  (Port 8080) │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -363,6 +495,8 @@ Persistent WebSocket Communication
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** All instances use the same port (8080) for both HTTP and WebSocket connections. WebSocket uses HTTP upgrade on the same port, not a separate port.
 
 ## Error Handling Architecture
 
@@ -402,6 +536,31 @@ Persistent WebSocket Communication
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Server Configuration Options
+
+**Command Line Arguments:**
+- `--ssl, -s` - Enable SSL/TLS (default port: 8443)
+- `--cert <file>` - SSL certificate file path
+- `--key <file>` - SSL private key file path
+- `--port <port>` - Server port (default: 8080, 8443 with SSL)
+- `--help, -h` - Show help message
+
+**SSL/TLS Configuration:**
+- Uses OpenSSL for SSL/TLS support
+- Supports both HTTP/HTTPS and WS/WSS on same port
+- Configurable certificate and key files
+- SSL context with security options:
+  - SSLv23/TLS support
+  - No SSLv2 (deprecated)
+  - Single DH use
+  - Certificate validation
+
+**Session Configuration:**
+- Session tokens with unique identifiers
+- CSRF tokens for form protection
+- Cookie-based session persistence
+- Session expiration and cleanup
+
 ## Monitoring and Observability
 
 ```
@@ -414,10 +573,62 @@ Persistent WebSocket Communication
 │  │  HTTP: Request/response metrics, error rates         │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
+│  │  WebSocket: Connection metrics, message rates        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
 │  │  Server: Connection metrics, resource usage          │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  I/O: Socket metrics, async operation timing        │  │
 │  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Security: Authentication events, access logs        │  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Logging Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Logging Levels                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   TRACE      │  │   DEBUG      │  │   INFO       │      │
+│  │  (Detailed)  │  │  (Diag)      │  │  (General)   │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   WARN       │  │   ERROR      │  │  CRITICAL    │      │
+│  │  (Warnings)  │  │  (Errors)    │  │  (Critical)  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   Logging Outputs                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Console: Structured logging with source location     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  File: Persistent log file (jetson.log)               │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### WebSocket Monitoring
+
+**Connection Metrics:**
+- Active WebSocket connections count
+- Connection success/failure rates
+- WebSocket upgrade success rates
+- Session ID tracking
+
+**Security Metrics:**
+- Authentication failures
+- Protocol validation failures
+- Token validation failures
+- Unauthorized connection attempts
+
+**Performance Metrics:**
+- Message throughput
+- Latency measurements
+- Connection duration
+- Memory usage per connection
