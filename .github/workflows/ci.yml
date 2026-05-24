@@ -67,24 +67,19 @@ jobs:
 
     - name: Start server for integration tests
       run: |
-        ./build/jetson --port 8081 &
+        ./build/jetson &
         SERVER_PID=$!
         echo "Server PID: $SERVER_PID"
         
         # Wait for server to be ready
         for i in {1..30}; do
-          if curl -s http://localhost:8081/ > /dev/null 2>&1; then
+          if curl -s http://localhost:8080/ > /dev/null 2>&1; then
             echo "Server is ready"
             break
           fi
           echo "Waiting for server... ($i/30)"
           sleep 1
         done
-        
-        # Update test scripts to use port 8081
-        sed -i 's/:8080/:8081/g' tests/integration/test-api.py
-        sed -i 's/:8080/:8081/g' tests/integration/test_auth.py
-        sed -i 's/:8080/:8081/g' tests/integration/test_websocket.py
 
     - name: Run integration tests
       run: |
@@ -95,7 +90,7 @@ jobs:
     - name: Stop server
       if: always()
       run: |
-        pkill -f "jetson --port 8081" || true
+        pkill -f "jetson" || true
 
     - name: Compute version
       id: version
