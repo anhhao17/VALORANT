@@ -1,7 +1,7 @@
 #include "logging.hpp"
 #include <iostream>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace
@@ -92,4 +92,4 @@ void shutdownLogging()
     spdlog::shutdown();
 }
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

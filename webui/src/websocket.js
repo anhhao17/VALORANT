@@ -8,7 +8,7 @@ class WebSocketService {
     this.listeners = new Map()
   }
 
-  connect(url = 'ws://localhost:8081') {
+  connect(url = 'ws://localhost:8080') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log('WebSocket already connected')
       return

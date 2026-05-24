@@ -3,7 +3,7 @@
 #include "../logging.hpp"
 #include <boost/beast/http/verb.hpp>
 
-namespace jetson::bmcweb::middleware
+namespace embed::bmcweb::middleware
 {
 
 AuthMiddleware::AuthMiddleware()
@@ -196,4 +196,4 @@ void AuthMiddleware::process(
     next();
 }
 
-}  // namespace jetson::bmcweb::middleware
+}  // namespace embed::bmcweb::middleware

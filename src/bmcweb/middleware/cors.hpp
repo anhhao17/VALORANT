@@ -3,7 +3,7 @@
 #include "middleware.hpp"
 #include <string>
 
-namespace jetson::bmcweb::middleware
+namespace embed::bmcweb::middleware
 {
 
 /**
@@ -23,4 +23,4 @@ class CorsMiddleware : public Middleware
     std::string allowedOrigin_;
 };
 
-} // namespace jetson::bmcweb::middleware
+} // namespace embed::bmcweb::middleware

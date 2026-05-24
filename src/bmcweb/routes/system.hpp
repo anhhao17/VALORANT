@@ -8,14 +8,14 @@
 #include "../logging.hpp"
 #include <nlohmann/json.hpp>
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb::http;
 
 /**
  * @brief Register system-related API endpoints
  */
 void registerSystemRoutes(App& app);
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

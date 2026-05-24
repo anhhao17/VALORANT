@@ -1,8 +1,11 @@
 #include "server.hpp"
-
+#include "websocket.hpp"
 #include "logging.hpp"
+#include <random>
+#include <sstream>
+#include <iomanip>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 // HttpSession implementation
@@ -32,6 +35,14 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
     LOG_INFO(
         "Received request: {} {}", std::string(req.method_string()), std::string(req.target()));
 
+    // Check for WebSocket upgrade request
+    if (websocket::is_upgrade(req))
+    {
+        LOG_INFO("WebSocket upgrade request detected");
+        handleWebSocketUpgrade();
+        return;
+    }
+
     // Process the request
     handleRequest();
 
@@ -57,6 +68,34 @@ void HttpSession::handleRequest()
 
     // Convert back to Beast response
     res = asyncResp->res.getBeastResponse();
+}
+
+void HttpSession::handleWebSocketUpgrade()
+{
+    // Accept the WebSocket upgrade
+    auto wsSession = std::make_shared<WebSocketSession>(std::move(stream.socket()), app_, req);
+    
+    // Generate unique session ID
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 15);
+    
+    std::stringstream ss;
+    ss << std::hex;
+    for (int i = 0; i < 32; ++i)
+    {
+        ss << std::setw(1) << dis(gen);
+    }
+    std::string session_id = ss.str();
+    
+    // Add to WebSocket manager
+    auto& manager = WebSocketManager::getInstance();
+    manager.addSession(session_id, wsSession);
+    
+    // Run the WebSocket session (accept is called in constructor)
+    wsSession->run();
+    
+    LOG_INFO("WebSocket upgrade completed for session: {}", session_id);
 }
 
 void HttpSession::onWrite(bool close, beast::error_code ec, std::size_t /* bytesTransferred */)
@@ -165,18 +204,12 @@ void HttpServer::run()
     // The io_context is required for all I/O
     asio::io_context ioc{threads};
 
-    // Create and launch a listening port for HTTP
+    // Create and launch a listening port for HTTP (also handles WebSocket upgrades)
     std::make_shared<HttpListener>(
         ioc, tcp::endpoint{asio::ip::make_address(address_), port_}, app_)
         ->run();
 
-    // Create and launch a listening port for WebSocket (port + 1)
-    unsigned short ws_port = port_ + 1;
-    websocket_listener_ = std::make_shared<WebSocketListener>(
-        ioc, tcp::endpoint{asio::ip::make_address(address_), ws_port}, app_);
-    websocket_listener_->run();
-    
-    LOG_INFO("WebSocket listener configured on {}:{}", address_, ws_port);
+    LOG_INFO("HTTP server (with WebSocket upgrade support) configured on {}:{}", address_, port_);
 
     // Capture SIGINT and SIGTERM to perform a clean shutdown
     asio::signal_set signals(ioc, SIGINT, SIGTERM);
@@ -203,4 +236,4 @@ void HttpServer::run()
     LOG_INFO("HTTP server stopped");
 }
 
-}  // namespace jetson::bmcweb
+}  // namespace embed::bmcweb

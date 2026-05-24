@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 /**
@@ -42,11 +42,11 @@ void setLogLevel(spdlog::level::level_enum level);
 void shutdownLogging();
 
 // Convenience macros for logging with source location
-#define LOG_TRACE(...) ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::trace, __VA_ARGS__)
-#define LOG_DEBUG(...) ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::debug, __VA_ARGS__)
-#define LOG_INFO(...)  ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::info, __VA_ARGS__)
-#define LOG_WARN(...)  ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::warn, __VA_ARGS__)
-#define LOG_ERROR(...) ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::err, __VA_ARGS__)
-#define LOG_CRITICAL(...) ::jetson::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::critical, __VA_ARGS__)
+#define LOG_TRACE(...) ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::trace, __VA_ARGS__)
+#define LOG_DEBUG(...) ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::debug, __VA_ARGS__)
+#define LOG_INFO(...)  ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::info, __VA_ARGS__)
+#define LOG_WARN(...)  ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::warn, __VA_ARGS__)
+#define LOG_ERROR(...) ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::err, __VA_ARGS__)
+#define LOG_CRITICAL(...) ::embed::bmcweb::getLogger()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::critical, __VA_ARGS__)
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

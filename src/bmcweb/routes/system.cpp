@@ -1,7 +1,7 @@
 #include "system.hpp"
 #include "../logging.hpp"
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
 void registerSystemRoutes(App& app)
@@ -55,4 +55,4 @@ void registerSystemRoutes(App& app)
         });
 }
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

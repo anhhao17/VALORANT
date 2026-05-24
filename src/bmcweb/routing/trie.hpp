@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace jetson::bmcweb::routing
+namespace embed::bmcweb::routing
 {
 
 /**
@@ -107,4 +107,4 @@ class Trie
     std::shared_ptr<TrieNode> root_;
 };
 
-}  // namespace jetson::bmcweb::routing
+}  // namespace embed::bmcweb::routing

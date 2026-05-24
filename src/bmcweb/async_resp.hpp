@@ -4,7 +4,7 @@
 #include <functional>
 #include <memory>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 /**
@@ -32,4 +32,4 @@ class AsyncResp
     Response res;
 };
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

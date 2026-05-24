@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace jetson::bmcweb::middleware
+namespace embed::bmcweb::middleware
 {
 
 /**
@@ -35,4 +35,4 @@ class AuthMiddleware : public Middleware
     bool validateCsrfToken(const Request& req, const std::string& csrfToken);
 };
 
-} // namespace jetson::bmcweb::middleware
+} // namespace embed::bmcweb::middleware

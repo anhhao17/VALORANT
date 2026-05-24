@@ -6,7 +6,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 enum class PersistenceType
@@ -66,4 +66,4 @@ private:
     std::chrono::minutes timeoutInMinutes;
 };
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

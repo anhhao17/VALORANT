@@ -8,9 +8,9 @@
 #include "bmcweb/async_resp.hpp"
 #include <boost/beast/http.hpp>
 
-using namespace jetson::bmcweb;
-using namespace jetson::bmcweb::middleware;
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb;
+using namespace embed::bmcweb::middleware;
+using namespace embed::bmcweb::http;
 
 class MiddlewareTest : public ::testing::Test
 {

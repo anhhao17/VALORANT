@@ -3,7 +3,7 @@
 #include <boost/beast/http.hpp>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace http = boost::beast::http;
@@ -12,4 +12,4 @@ namespace http = boost::beast::http;
 using Verb = http::verb;
 using status = http::status;
 
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

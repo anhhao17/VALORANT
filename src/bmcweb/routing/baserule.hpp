@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace routing
@@ -55,4 +55,4 @@ class BaseRule
 };
 
 } // namespace routing
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

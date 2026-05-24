@@ -1,7 +1,7 @@
 #include "hwmon.hpp"
 #include "../logging.hpp"
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
 void registerHwMonRoutes(App& app)
@@ -72,4 +72,4 @@ void registerHwMonRoutes(App& app)
         });
 }
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

@@ -5,19 +5,36 @@
 #include <sstream>
 #include <iomanip>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 // WebSocketSession implementation
 
 WebSocketSession::WebSocketSession(tcp::socket&& socket, App& app)
-    : ws_(std::move(socket)), app_(app), active_(false)
+    : ws_(std::move(socket)), app_(app), active_(false), is_upgrade_(false)
 {
     LOG_DEBUG("WebSocket session created");
 }
 
+WebSocketSession::WebSocketSession(tcp::socket&& socket, App& app, http::request<http::string_body>& req)
+    : ws_(std::move(socket)), app_(app), active_(false), is_upgrade_(true)
+{
+    LOG_DEBUG("WebSocket session created for HTTP upgrade");
+    // Accept the WebSocket upgrade with the HTTP request
+    ws_.async_accept(req,
+        [self = shared_from_this()](beast::error_code ec) {
+            self->onAccept(ec);
+        });
+}
+
 void WebSocketSession::run()
 {
+    // If this is an HTTP upgrade, the accept was already called in the constructor
+    if (is_upgrade_)
+    {
+        return;
+    }
+    
     // Set WebSocket options
     websocket::stream_base::timeout timeout{
         std::chrono::seconds(30),   // handshake timeout
@@ -239,96 +256,4 @@ size_t WebSocketManager::getMaxConnections() const
     return max_connections_;
 }
 
-// WebSocketListener implementation
-
-WebSocketListener::WebSocketListener(asio::io_context& ioc, tcp::endpoint endpoint, App& app)
-    : ioc_(ioc), acceptor_(ioc), app_(app)
-{
-    beast::error_code ec;
-    
-    acceptor_.open(endpoint.protocol(), ec);
-    if (ec)
-    {
-        LOG_ERROR("WebSocket acceptor open error: {}", ec.message());
-        return;
-    }
-    
-    acceptor_.set_option(asio::socket_base::reuse_address(true), ec);
-    if (ec)
-    {
-        LOG_ERROR("WebSocket acceptor set_option error: {}", ec.message());
-        return;
-    }
-    
-    acceptor_.bind(endpoint, ec);
-    if (ec)
-    {
-        LOG_ERROR("WebSocket acceptor bind error: {}", ec.message());
-        return;
-    }
-    
-    acceptor_.listen(asio::socket_base::max_listen_connections, ec);
-    if (ec)
-    {
-        LOG_ERROR("WebSocket acceptor listen error: {}", ec.message());
-        return;
-    }
-    
-    LOG_INFO("WebSocket listener configured on {}:{}", endpoint.address().to_string(), endpoint.port());
-}
-
-void WebSocketListener::run()
-{
-    doAccept();
-}
-
-void WebSocketListener::doAccept()
-{
-    acceptor_.async_accept(
-        asio::make_strand(acceptor_.get_executor()),
-        [self = shared_from_this()](beast::error_code ec, tcp::socket socket) {
-            self->onAccept(ec, std::move(socket));
-        });
-}
-
-void WebSocketListener::onAccept(beast::error_code ec, tcp::socket socket)
-{
-    if (ec)
-    {
-        if (ec != asio::error::operation_aborted)
-        {
-            LOG_ERROR("WebSocket accept error: {}", ec.message());
-        }
-        return;
-    }
-    
-    LOG_DEBUG("New WebSocket connection accepted");
-    
-    // Generate unique session ID using random string
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, 15);
-    
-    std::stringstream ss;
-    ss << std::hex;
-    for (int i = 0; i < 32; ++i)
-    {
-        ss << std::setw(1) << dis(gen);
-    }
-    std::string session_id = ss.str();
-    
-    // Create WebSocket session
-    auto session = std::make_shared<WebSocketSession>(std::move(socket), app_);
-    
-    // Add to manager
-    auto& manager = WebSocketManager::getInstance();
-    manager.addSession(session_id, session);
-    
-    // Run the session
-    session->run();
-    
-    // Accept next connection
-    doAccept();
-}
-
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

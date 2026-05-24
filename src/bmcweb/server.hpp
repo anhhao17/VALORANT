@@ -4,6 +4,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
+#include <boost/beast/websocket.hpp>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -15,11 +16,12 @@
 #include "logging.hpp"
 #include "websocket.hpp"
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace beast = boost::beast;
 namespace http = beast::http;
+namespace websocket = beast::websocket;
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 
@@ -41,6 +43,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
    private:
     void onRead(beast::error_code ec, std::size_t /* bytesTransferred */);
     void handleRequest();
+    void handleWebSocketUpgrade();
     void onWrite(bool close, beast::error_code ec, std::size_t /* bytesTransferred */);
 
     beast::tcp_stream stream;
@@ -74,7 +77,7 @@ class HttpListener : public std::enable_shared_from_this<HttpListener>
  * @brief HTTP server
  *
  * Manages the IO context and starts the listener.
- * Also manages WebSocket listener for real-time streaming.
+ * Handles both HTTP requests and WebSocket upgrades on the same port.
  */
 class HttpServer
 {
@@ -91,7 +94,6 @@ class HttpServer
     App& app_;
     std::string address_;
     unsigned short port_;
-    std::shared_ptr<WebSocketListener> websocket_listener_;
 };
 
-}  // namespace jetson::bmcweb
+}  // namespace embed::bmcweb

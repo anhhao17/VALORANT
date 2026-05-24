@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/beast/websocket.hpp>
+#include <boost/beast/http.hpp>
 #include <boost/asio.hpp>
 #include <memory>
 #include <string>
@@ -8,11 +9,12 @@
 #include <functional>
 #include <mutex>
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
+namespace http = beast::http;
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 
@@ -31,7 +33,11 @@ class AsyncResp;
 class WebSocketSession : public std::enable_shared_from_this<WebSocketSession>
 {
    public:
+    // Constructor for direct WebSocket connections (not used with HTTP upgrade)
     explicit WebSocketSession(tcp::socket&& socket, App& app);
+    
+    // Constructor for HTTP upgrade
+    WebSocketSession(tcp::socket&& socket, App& app, http::request<http::string_body>& req);
     
     void run();
     
@@ -53,6 +59,7 @@ class WebSocketSession : public std::enable_shared_from_this<WebSocketSession>
     beast::flat_buffer buffer_;
     bool active_;
     std::string username_;
+    bool is_upgrade_;
     
     // Memory optimization: fixed buffer size
     static constexpr std::size_t MAX_MESSAGE_SIZE = 4096;
@@ -95,23 +102,4 @@ class WebSocketManager
     size_t current_connections_;
 };
 
-/**
- * @brief WebSocket listener for accepting WebSocket connections
- */
-class WebSocketListener : public std::enable_shared_from_this<WebSocketListener>
-{
-   public:
-    WebSocketListener(asio::io_context& ioc, tcp::endpoint endpoint, App& app);
-    
-    void run();
-    
-   private:
-    void doAccept();
-    void onAccept(beast::error_code ec, tcp::socket socket);
-    
-    asio::io_context& ioc_;
-    tcp::acceptor acceptor_;
-    App& app_;
-};
-
-} // namespace jetson::bmcweb
+} // namespace embed::bmcweb

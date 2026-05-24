@@ -3,10 +3,10 @@
 #include "../logging.hpp"
 #include <boost/beast/http/field.hpp>
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
-using namespace jetson::bmcweb::http;
+using namespace embed::bmcweb::http;
 
 // Simple password validation (in production, use proper password hashing)
 bool validateCredentials(const std::string& username, const std::string& password)
@@ -206,4 +206,4 @@ void registerAuthRoutes(App& app)
         });
 }
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

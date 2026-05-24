@@ -17,7 +17,7 @@
 #include "http/types.hpp"
 #include "logging.hpp"
 
-namespace jetson::bmcweb
+namespace embed::bmcweb
 {
 
 namespace webassets
@@ -267,4 +267,4 @@ inline void requestRoutes(App& app)
 
 }  // namespace webassets
 
-}  // namespace jetson::bmcweb
+}  // namespace embed::bmcweb

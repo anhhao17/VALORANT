@@ -1,7 +1,7 @@
 #include "cors.hpp"
 #include "../logging.hpp"
 
-namespace jetson::bmcweb::middleware
+namespace embed::bmcweb::middleware
 {
 
 CorsMiddleware::CorsMiddleware(const std::string& allowedOrigin)
@@ -26,4 +26,4 @@ void CorsMiddleware::process(const Request&, const std::shared_ptr<AsyncResp>& a
     next();
 }
 
-} // namespace jetson::bmcweb::middleware
+} // namespace embed::bmcweb::middleware

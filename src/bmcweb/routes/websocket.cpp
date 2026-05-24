@@ -5,7 +5,7 @@
 #include <thread>
 #include <chrono>
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
 using json = nlohmann::json;
@@ -111,4 +111,4 @@ void WebSocketRoutes::unsubscribeFromSensors(std::shared_ptr<WebSocketSession> s
     LOG_DEBUG("Session unsubscribed from sensor updates");
 }
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes

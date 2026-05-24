@@ -9,7 +9,7 @@
 #include "../http/response.hpp"
 #include "../websocket.hpp"
 
-namespace jetson::bmcweb::routes
+namespace embed::bmcweb::routes
 {
 
 namespace http = boost::beast::http;
@@ -42,4 +42,4 @@ class WebSocketRoutes
     static void unsubscribeFromSensors(std::shared_ptr<WebSocketSession> session);
 };
 
-} // namespace jetson::bmcweb::routes
+} // namespace embed::bmcweb::routes
