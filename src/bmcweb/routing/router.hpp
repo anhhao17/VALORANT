@@ -86,10 +86,10 @@ class Router
     void handle(const Request& req, const std::shared_ptr<AsyncResp>& asyncResp)
     {
         std::string url = req.target();
-        LOG_DEBUG("Routing request to: {}", url);
+        LOG_TRACE("Routing request to: {}", url);
         auto [ruleIndices, params] = trie_.find(url);
 
-        LOG_DEBUG("Route match result: ruleIndices count={}, totalRules={}", ruleIndices.size(), allRules_.size());
+        LOG_TRACE("Route match result: ruleIndices count={}, totalRules={}", ruleIndices.size(), allRules_.size());
 
         // Find the first rule that handles this HTTP method
         for (unsigned int ruleIndex : ruleIndices)

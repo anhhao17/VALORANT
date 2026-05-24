@@ -9,7 +9,7 @@ namespace embed::bmcweb::middleware
 
 AuthMiddleware::AuthMiddleware()
 {
-    LOG_DEBUG("Authentication middleware initialized");
+    LOG_TRACE("Authentication middleware initialized");
 }
 
 bool AuthMiddleware::validateCookieAuth(const Request& req)
@@ -106,13 +106,13 @@ bool AuthMiddleware::validateCsrfToken(const Request& req, const std::string& cs
 void AuthMiddleware::process(
     const Request& req, const std::shared_ptr<AsyncResp>& asyncResp, std::function<void()> next)
 {
-    LOG_DEBUG("Processing authentication middleware");
+    LOG_TRACE("Processing authentication middleware");
 
     // Skip authentication for static file routes (non-API routes)
     std::string target = std::string(req.target());
     if (target.find("/api/") != 0)
     {
-        LOG_DEBUG("Skipping authentication for non-API route: {}", target);
+        LOG_TRACE("Skipping authentication for non-API route: {}", target);
         next();
         return;
     }
@@ -121,7 +121,7 @@ void AuthMiddleware::process(
     if (target == "/api/login" || target == "/api/logout" || target == "/api/session" ||
         target == "/api/system/sessions" || target.find("/api/config") == 0)
     {
-        LOG_DEBUG("Skipping authentication for public endpoint: {}", target);
+        LOG_TRACE("Skipping authentication for public endpoint: {}", target);
         next();
         return;
     }
@@ -129,7 +129,7 @@ void AuthMiddleware::process(
     // Skip authentication for user management endpoints (handled by route handler authorization)
     if (target.find("/api/users") == 0)
     {
-        LOG_DEBUG("Skipping authentication for user management endpoint: {}", target);
+        LOG_TRACE("Skipping authentication for user management endpoint: {}", target);
         next();
         return;
     }
@@ -137,7 +137,7 @@ void AuthMiddleware::process(
     // Skip authentication for streaming endpoints (video access)
     if (target.find("/api/streams") == 0 || target.find("/video/") == 0)
     {
-        LOG_DEBUG("Skipping authentication for streaming endpoint: {}", target);
+        LOG_TRACE("Skipping authentication for streaming endpoint: {}", target);
         next();
         return;
     }

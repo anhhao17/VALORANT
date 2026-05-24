@@ -19,7 +19,7 @@ void registerStreamingRoutes(App& app)
         .setMethods({boost::beast::http::verb::get})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_DEBUG("GET /api/streams called");
+            LOG_INFO("GET /api/streams called");
 
             try
             {
@@ -60,7 +60,7 @@ void registerStreamingRoutes(App& app)
         .setMethods({boost::beast::http::verb::post})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_DEBUG("POST /api/streams called");
+            LOG_INFO("POST /api/streams called");
 
             try
             {
@@ -138,7 +138,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("POST /api/streams/*/start called");
+            LOG_INFO("POST /api/streams/*/start called");
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -196,7 +196,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("POST /api/streams/*/stop called");
+            LOG_INFO("POST /api/streams/*/stop called");
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -254,7 +254,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("DELETE {} called", target);
+            LOG_INFO("DELETE {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -303,7 +303,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("PUT {} called", target);
+            LOG_INFO("PUT {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -393,7 +393,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("GET {} called", target);
+            LOG_INFO("GET {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/video/");
@@ -486,7 +486,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("GET {} called", target);
+            LOG_INFO("GET {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -543,7 +543,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("POST {} called", target);
+            LOG_INFO("POST {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -595,7 +595,7 @@ void registerStreamingRoutes(App& app)
         .setMethods({boost::beast::http::verb::get})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_DEBUG("GET /api/streams/statistics called");
+            LOG_INFO("GET /api/streams/statistics called");
 
             try
             {
@@ -636,7 +636,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("POST {} called", target);
+            LOG_INFO("POST {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -711,7 +711,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("POST {} called", target);
+            LOG_INFO("POST {} called", target);
 
             // Extract recording ID from path
             size_t pos = target.find("/api/recordings/");
@@ -769,7 +769,7 @@ void registerStreamingRoutes(App& app)
         .setMethods({boost::beast::http::verb::get})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_DEBUG("GET /api/recordings called");
+            LOG_INFO("GET /api/recordings called");
 
             try
             {
@@ -810,7 +810,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("DELETE {} called", target);
+            LOG_INFO("DELETE {} called", target);
 
             // Extract recording ID from path
             size_t pos = target.find("/api/recordings/");
@@ -860,7 +860,7 @@ void registerStreamingRoutes(App& app)
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("GET {} called", target);
+            LOG_INFO("GET {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");

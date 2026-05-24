@@ -47,7 +47,7 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
     }
 
     // Log the HTTP request (method and target only)
-    LOG_DEBUG("{} {}", std::string(req.method_string()), std::string(req.target()));
+    LOG_INFO("{} {}", std::string(req.method_string()), std::string(req.target()));
 
     // Log complete request details for debugging (only in trace mode)
     if (embed::bmcweb::getCurrentLogLevel() == spdlog::level::trace)
@@ -140,23 +140,26 @@ void HttpSession::handleRequest()
     // Convert back to Beast response
     res = asyncResp->res.getBeastResponse();
 
-    // Log response details for debugging
-    LOG_DEBUG("========== RESPONSE START ==========");
-    LOG_DEBUG("Status: {} {}", res.result_int(), std::string(res.reason()));
-    LOG_DEBUG("Response Headers:");
-    for (const auto& field : res)
+    // Log response details for debugging (only in trace mode)
+    if (embed::bmcweb::getCurrentLogLevel() == spdlog::level::trace)
     {
-        LOG_DEBUG("  {}: {}", std::string(field.name_string()), std::string(field.value()));
+        LOG_TRACE("========== RESPONSE START ==========");
+        LOG_TRACE("Status: {} {}", res.result_int(), std::string(res.reason()));
+        LOG_TRACE("Response Headers:");
+        for (const auto& field : res)
+        {
+            LOG_TRACE("  {}: {}", std::string(field.name_string()), std::string(field.value()));
+        }
+        if (!res.body().empty())
+        {
+            LOG_TRACE("Response Body: {}", res.body());
+        }
+        else
+        {
+            LOG_TRACE("Response Body: (empty)");
+        }
+        LOG_TRACE("========== RESPONSE END ==========");
     }
-    if (!res.body().empty())
-    {
-        LOG_DEBUG("Response Body: {}", res.body());
-    }
-    else
-    {
-        LOG_DEBUG("Response Body: (empty)");
-    }
-    LOG_DEBUG("========== RESPONSE END ==========");
 }
 
 void HttpSession::handleWebSocketUpgrade()

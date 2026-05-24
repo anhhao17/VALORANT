@@ -39,7 +39,7 @@ class App
      */
     void addMiddleware(middleware::MiddlewareFunction middleware)
     {
-        LOG_DEBUG("Adding middleware to chain");
+        LOG_TRACE("Adding middleware to chain");
         middlewares_.add(std::move(middleware));
     }
 
@@ -58,11 +58,11 @@ class App
      */
     void handle(const Request& req, const std::shared_ptr<AsyncResp>& asyncResp)
     {
-        LOG_DEBUG("Handling request: {}", req.target());
+        LOG_TRACE("Handling request: {}", req.target());
         // Execute middleware chain, then route
         middlewares_.execute(req, asyncResp,
                              [this, &req, asyncResp]() {
-                                 LOG_DEBUG("Routing request to handler");
+                                 LOG_TRACE("Routing request to handler");
                                  router_.handle(req, asyncResp);
                              });
     }
