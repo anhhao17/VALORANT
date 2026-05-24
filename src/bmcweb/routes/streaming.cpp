@@ -251,6 +251,15 @@ void registerStreamingRoutes(App& app)
             std::string target = std::string(req.target());
             LOG_DEBUG("DELETE {} called", target);
 
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::delete_)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
             if (pos == std::string::npos)
@@ -286,6 +295,104 @@ void registerStreamingRoutes(App& app)
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error removing stream: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // PUT /api/streams/{id} - Update stream
+    JETSON_ROUTE(app, "/api/streams/*")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("PUT {} called", target);
+
+            // Check HTTP method
+            if (req.method() != boost::beast::http::verb::put)
+            {
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13); // "/api/streams/" length
+
+            try
+            {
+                if (req.body().empty())
+                {
+                    asyncResp->res.result(status::bad_request);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Request body is required\"}");
+                    return;
+                }
+
+                auto body = nlohmann::json::parse(req.body());
+                std::string name = body.value("name", "");
+                std::string sourcePath = body.value("sourcePath", "");
+                int quality = body.value("quality", 80);
+                bool loop = body.value("loop", true);
+
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto config = streamer.getStream(id);
+                
+                if (config.id.empty())
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
+                    return;
+                }
+
+                // Update the stream configuration
+                streaming::StreamConfig updatedConfig = config;
+                if (!name.empty()) updatedConfig.name = name;
+                if (!sourcePath.empty()) updatedConfig.sourcePath = sourcePath;
+                updatedConfig.quality = quality;
+                updatedConfig.loop = loop;
+
+                // Remove and re-add the stream (simplest approach for now)
+                streamer.removeStream(id);
+                if (!streamer.addStream(updatedConfig))
+                {
+                    asyncResp->res.result(status::internal_server_error);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to update stream\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Stream updated successfully";
+                response["id"] = id;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Stream updated: {}", id);
+            }
+            catch (const nlohmann::json::parse_error& e)
+            {
+                LOG_ERROR("JSON parse error: {}", e.what());
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid JSON format\"}");
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error updating stream: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");

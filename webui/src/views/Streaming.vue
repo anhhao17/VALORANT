@@ -257,6 +257,12 @@ const loadStreams = async () => {
 }
 
 const createStream = async () => {
+  // Validate required fields
+  if (!newStream.value.id || !newStream.value.sourcePath) {
+    alert('Stream ID and Source Path are required')
+    return
+  }
+  
   try {
     const response = await fetch('/api/streams', {
       method: 'POST',
