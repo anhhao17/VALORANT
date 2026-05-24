@@ -484,7 +484,7 @@ Persistent WebSocket Communication
 │                   Horizontal Scaling                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │  Instance 1  │  │  Instance 2  │  │  Instance N  │      │
-│  │  (Port 8080) │  │  (Port 8081) │  │  (Port 808N) │      │
+│  │  (Port 8080) │  │  (Port 8080) │  │  (Port 8080) │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -495,6 +495,8 @@ Persistent WebSocket Communication
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** All instances use the same port (8080) for both HTTP and WebSocket connections. WebSocket uses HTTP upgrade on the same port, not a separate port.
 
 ## Error Handling Architecture
 
