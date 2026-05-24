@@ -41,26 +41,31 @@ This project implements a minimal version of the bmcweb architecture, providing:
 ## Building
 
 ```bash
+# Build backend
 ./scripts/build.sh
-```
 
-Or manually:
-
-```bash
-mkdir build && cd build
-cmake ..
-make
+# Build frontend
+cd webui
+npm install
+npm run build
 ```
 
 ## Running
 
 ```bash
+# Terminal 1: Start backend
 ./build/jetson
+
+# Terminal 2: Start frontend (development mode)
+cd webui
+npm run dev
 ```
 
-The server will start on `http://localhost:8080` with the following default credentials:
+The backend server will start on `http://localhost:8080` with the following default credentials:
 - Username: `admin`
 - Password: `password`
+
+The frontend development server will start on `http://localhost:5173` with hot reload enabled.
 
 The application will create a log file `jetson.log` in the current directory with detailed logging information.
 

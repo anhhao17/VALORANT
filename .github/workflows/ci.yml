@@ -28,16 +28,11 @@ jobs:
           cmake \
           g++ \
           libboost-all-dev \
-          libavcodec-dev \
-          libavformat-dev \
-          libavutil-dev \
-          libswscale-dev \
-          pkg-config \
           libssl-dev \
           zlib1g-dev \
           libspdlog-dev \
           nlohmann-json3-dev \
-          libyaml-cpp-dev
+          clang-format
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -46,15 +41,19 @@ jobs:
         cache: 'npm'
         cache-dependency-path: webui/package-lock.json
 
-    - name: Build WebUI
+    - name: Install Node dependencies
       run: |
         cd webui
         npm ci
+
+    - name: Build Vue UI
+      run: |
+        cd webui
         npm run build
 
     - name: Configure CMake
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DJETSON_BUILD_TESTS=ON
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
 
     - name: Build
       run: |
@@ -67,24 +66,21 @@ jobs:
 
     - name: Check formatting
       run: |
-        sudo apt-get install -y clang-format
-        find src tests -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+        find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run --Werror
 
-    # ── Package ──────────────────────────────────────────────────────────────
     - name: Compute version
       id: version
       run: |
-        VER=$(git describe --tags --always --dirty 2>/dev/null || echo "v0.1.0-dev")
+        VER=$(git describe --tags --always --dirty 2>/dev/null || echo "v1.0.0-dev")
         echo "version=${VER}" >> "$GITHUB_OUTPUT"
-        echo "pkgname=jetson-${VER}-linux-x86_64" >> "$GITHUB_OUTPUT"
+        echo "pkgname=jetson-bmcweb-${VER}-linux-x86_64" >> "$GITHUB_OUTPUT"
 
     - name: Assemble package
       run: |
         PKG="${{ steps.version.outputs.pkgname }}"
-        mkdir -p "pkg/${PKG}/webui"
-        cp build/jetson                 "pkg/${PKG}/jetson"
-        cp config.yaml.example          "pkg/${PKG}/config.yaml"
-        cp -r webui/dist                "pkg/${PKG}/webui/dist"
+        mkdir -p "pkg/${PKG}"
+        cp build/jetson "pkg/${PKG}/jetson"
+        cp -r webui/dist "pkg/${PKG}/webui"
         tar -czf "${PKG}.tar.gz" -C pkg "${PKG}"
         echo "Package contents:"
         tar -tzf "${PKG}.tar.gz"
