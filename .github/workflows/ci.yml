@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+# Cancel in-progress runs for the same workflow and branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # needed for git describe
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          g++ \
+          libboost-all-dev \
+          libavcodec-dev \
+          libavformat-dev \
+          libavutil-dev \
+          libswscale-dev \
+          pkg-config \
+          libssl-dev \
+          zlib1g-dev \
+          libspdlog-dev \
+          nlohmann-json3-dev \
+          libyaml-cpp-dev
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: webui/package-lock.json
+
+    - name: Build WebUI
+      run: |
+        cd webui
+        npm ci
+        npm run build
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DJETSON_BUILD_TESTS=ON
+
+    - name: Build
+      run: |
+        cmake --build build -- -j$(nproc)
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure
+
+    - name: Check formatting
+      run: |
+        sudo apt-get install -y clang-format
+        find src tests -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+
+    # ── Package ──────────────────────────────────────────────────────────────
+    - name: Compute version
+      id: version
+      run: |
+        VER=$(git describe --tags --always --dirty 2>/dev/null || echo "v0.1.0-dev")
+        echo "version=${VER}" >> "$GITHUB_OUTPUT"
+        echo "pkgname=jetson-${VER}-linux-x86_64" >> "$GITHUB_OUTPUT"
+
+    - name: Assemble package
+      run: |
+        PKG="${{ steps.version.outputs.pkgname }}"
+        mkdir -p "pkg/${PKG}/webui"
+        cp build/jetson                 "pkg/${PKG}/jetson"
+        cp config.yaml.example          "pkg/${PKG}/config.yaml"
+        cp -r webui/dist                "pkg/${PKG}/webui/dist"
+        tar -czf "${PKG}.tar.gz" -C pkg "${PKG}"
+        echo "Package contents:"
+        tar -tzf "${PKG}.tar.gz"
+
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.pkgname }}
+        path: ${{ steps.version.outputs.pkgname }}.tar.gz
+        retention-days: 30
