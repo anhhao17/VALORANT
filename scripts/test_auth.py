@@ -202,7 +202,7 @@ def run_auth_tests(base_url: str = "http://localhost:8080") -> Dict[str, bool]:
     # For CSRF test, we need to use cookie-based authentication
     # Create a session with cookies
     session = requests.Session()
-    login_response = session.post(f"{base_url}/api/login", json={"username": "admin", "password": password})
+    login_response = session.post(f"{base_url}/api/login", json={"username": "admin", "password": "password"})
     
     if login_response.status_code == 200:
         # Try POST without CSRF token using the session (which has the cookie)
