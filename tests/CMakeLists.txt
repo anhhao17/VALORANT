@@ -32,7 +32,9 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/hwmon.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/auth.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/websocket.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/config.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/hardware/sensor.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/config/config.cpp
 )
 
 target_include_directories(jetson_tests PRIVATE

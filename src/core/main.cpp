@@ -13,9 +13,11 @@
 #include "bmcweb/routes/hwmon.hpp"
 #include "bmcweb/routes/system.hpp"
 #include "bmcweb/routes/websocket.hpp"
+#include "bmcweb/routes/config.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
 #include "bmcweb/hardware/sensor.hpp"
+#include "bmcweb/config/config.hpp"
 
 using namespace embed::bmcweb::http;
 
@@ -111,6 +113,10 @@ int main(int argc, char* argv[])
     // Register hardware monitoring routes
     LOG_INFO("Registering hardware monitoring routes");
     embed::bmcweb::routes::registerHwMonRoutes(app);
+
+    // Register configuration routes
+    LOG_INFO("Registering configuration routes");
+    embed::bmcweb::routes::registerConfigRoutes(app);
 
     // Register WebSocket routes
     LOG_INFO("Registering WebSocket routes");

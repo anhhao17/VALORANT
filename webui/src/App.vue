@@ -7,6 +7,7 @@
           <li><router-link to="/">Dashboard</router-link></li>
           <li><router-link to="/system">System</router-link></li>
           <li><router-link to="/hwmon">Hardware</router-link></li>
+          <li><router-link to="/configuration">Configuration</router-link></li>
           <li v-if="authStore.isAuthenticated" class="user-info">
             <span>{{ authStore.user }}</span>
             <button @click="handleLogout" class="logout-btn">Logout</button>

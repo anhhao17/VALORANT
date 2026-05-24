@@ -44,7 +44,9 @@ add_executable(jetson
     src/bmcweb/routes/hwmon.cpp
     src/bmcweb/routes/auth.cpp
     src/bmcweb/routes/websocket.cpp
+    src/bmcweb/routes/config.cpp
     src/bmcweb/hardware/sensor.cpp
+    src/bmcweb/config/config.cpp
 )
 
 target_include_directories(jetson PRIVATE
