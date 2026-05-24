@@ -21,7 +21,7 @@ void WebSocketRoutes::registerRoutes()
 
 void WebSocketRoutes::handleSensorStream(std::shared_ptr<WebSocketSession> session)
 {
-    LOG_INFO("Starting sensor stream for session");
+    LOG_DEBUG("Starting sensor stream for session");
     
     // Subscribe to sensor updates
     WebSocketRoutes::subscribeToSensors(session);
@@ -71,7 +71,7 @@ void WebSocketRoutes::handleSpecificSensorStream(std::shared_ptr<WebSocketSessio
 
 void WebSocketRoutes::handleEventStream(std::shared_ptr<WebSocketSession> session)
 {
-    LOG_INFO("Starting event stream for session");
+    LOG_DEBUG("Starting event stream for session");
     
     // Send initial event
     json event;

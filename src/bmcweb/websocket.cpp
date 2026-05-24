@@ -162,7 +162,7 @@ void WebSocketSession::close()
         LOG_ERROR("WebSocket close error: {}", ec.message());
     }
     
-    LOG_INFO("WebSocket session closed");
+    LOG_DEBUG("WebSocket session closed");
 }
 
 // WebSocketManager implementation
@@ -192,7 +192,7 @@ void WebSocketManager::addSession(const std::string& id, std::shared_ptr<WebSock
     sessions_[id] = session;
     current_connections_++;
     
-    LOG_INFO("WebSocket session added: {} (total: {})", id, current_connections_);
+    LOG_DEBUG("WebSocket session added: {} (total: {})", id, current_connections_);
 }
 
 void WebSocketManager::removeSession(const std::string& id)
@@ -204,7 +204,7 @@ void WebSocketManager::removeSession(const std::string& id)
     {
         sessions_.erase(it);
         current_connections_--;
-        LOG_INFO("WebSocket session removed: {} (total: {})", id, current_connections_);
+        LOG_DEBUG("WebSocket session removed: {} (total: {})", id, current_connections_);
     }
 }
 

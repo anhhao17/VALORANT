@@ -195,7 +195,7 @@ void HttpSession::handleWebSocketUpgrade()
 
     // The HTTP session will be destroyed after this function returns
     // The WebSocket session now owns the socket
-    LOG_INFO("WebSocket upgrade initiated for session: {}", session_id);
+    LOG_DEBUG("WebSocket upgrade initiated for session: {}", session_id);
 }
 
 void HttpSession::onWrite(bool close, beast::error_code ec, std::size_t /* bytesTransferred */)
@@ -540,7 +540,7 @@ void HttpListener::onAccept(beast::error_code ec, tcp::socket socket)
         return;
     }
 
-    LOG_INFO("New connection accepted from {}", socket.remote_endpoint().address().to_string());
+    LOG_DEBUG("New connection accepted from {}", socket.remote_endpoint().address().to_string());
     // Create the session and run it
     std::make_shared<HttpSession>(std::move(socket), app_)->run();
 
@@ -560,7 +560,7 @@ void HttpListener::onAcceptSSL(beast::error_code ec, tcp::socket socket)
         return;
     }
 
-    LOG_INFO("New SSL connection accepted from {}", socket.remote_endpoint().address().to_string());
+    LOG_DEBUG("New SSL connection accepted from {}", socket.remote_endpoint().address().to_string());
     
     // Perform SSL handshake
     auto ssl_socket = std::make_shared<ssl::stream<tcp::socket>>(std::move(socket), ssl_context_);
