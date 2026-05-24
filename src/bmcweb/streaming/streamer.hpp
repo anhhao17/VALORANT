@@ -66,6 +66,10 @@ class VideoStreamer
     std::vector<RecordingInfo> getStreamRecordings(const std::string& streamId) const;
     bool deleteRecording(const std::string& recordingId);
     
+    // Thumbnail generation
+    std::vector<uint8_t> generateThumbnail(const std::string& id, int width = 320, int height = 240);
+    std::string getThumbnailPath(const std::string& id) const;
+    
    private:
     VideoStreamer();
     ~VideoStreamer();
@@ -73,6 +77,7 @@ class VideoStreamer
     void streamThread(const std::string& id);
     void loadMp4File(const std::string& id);
     void updateStatistics(const std::string& id, size_t bytesServed);
+    std::string generateThumbnailPath(const std::string& id) const;
     
     mutable std::mutex mutex_;
     std::unordered_map<std::string, StreamConfig> streams_;
@@ -81,6 +86,8 @@ class VideoStreamer
     std::unordered_map<std::string, FrameCallback> frameCallbacks_;
     std::unordered_map<std::string, std::thread> streamThreads_;
     std::unordered_map<std::string, StreamStatistics> statistics_;
+    std::unordered_map<std::string, std::vector<uint8_t>> thumbnails_;
+    std::string thumbnailPath_;
 };
 
 } // namespace embed::bmcweb::streaming

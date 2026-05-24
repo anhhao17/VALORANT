@@ -9,9 +9,19 @@
 namespace embed::bmcweb::streaming
 {
 
-VideoStreamer::VideoStreamer()
+VideoStreamer::VideoStreamer() : thumbnailPath_("/tmp/jetson_thumbnails")
 {
     LOG_INFO("Video streaming service initialized");
+    
+    // Create thumbnail directory
+    try
+    {
+        std::filesystem::create_directories(thumbnailPath_);
+    }
+    catch (const std::exception& e)
+    {
+        LOG_ERROR("Failed to create thumbnail directory: {}", e.what());
+    }
 }
 
 VideoStreamer::~VideoStreamer()
@@ -531,8 +541,18 @@ void VideoStreamer::applyConfiguration(const std::map<std::string, std::string>&
 
 std::string VideoStreamer::startRecording(const std::string& streamId, const std::string& format)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Get stream type
+    auto it = streams_.find(streamId);
+    if (it == streams_.end())
+    {
+        LOG_ERROR("Stream not found: {}", streamId);
+        return "";
+    }
+    
     auto& recordingManager = RecordingManager::getInstance();
-    return recordingManager.startRecording(streamId, format);
+    return recordingManager.startRecording(streamId, format, it->second.type);
 }
 
 bool VideoStreamer::stopRecording(const std::string& recordingId)
@@ -575,6 +595,174 @@ bool VideoStreamer::deleteRecording(const std::string& recordingId)
 {
     auto& recordingManager = RecordingManager::getInstance();
     return recordingManager.deleteRecording(recordingId);
+}
+
+std::string VideoStreamer::generateThumbnailPath(const std::string& id) const
+{
+    return thumbnailPath_ + "/" + id + ".jpg";
+}
+
+std::string VideoStreamer::getThumbnailPath(const std::string& id) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = thumbnails_.find(id);
+    if (it != thumbnails_.end() && !it->second.empty())
+    {
+        return generateThumbnailPath(id);
+    }
+    
+    return "";
+}
+
+std::vector<uint8_t> VideoStreamer::generateThumbnail(const std::string& id, int width, int height)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Check if stream exists
+    if (streams_.find(id) == streams_.end())
+    {
+        LOG_ERROR("Stream not found: {}", id);
+        return {};
+    }
+    
+    // Check if video data is available
+    if (videoData_.find(id) == videoData_.end() || videoData_[id].empty())
+    {
+        LOG_ERROR("No video data available for stream: {}", id);
+        return {};
+    }
+    
+    // For MP4 files, we'll create a simple thumbnail by extracting a frame
+    // Since we don't have video decoding libraries, we'll create a placeholder
+    // In a real implementation, this would use FFmpeg or similar to extract a frame
+    
+    LOG_INFO("Generating thumbnail for stream: {} ({}x{})", id, width, height);
+    
+    // Create a simple JPEG-like placeholder
+    // This is a minimal valid JPEG header + grayscale data
+    std::vector<uint8_t> thumbnail;
+    
+    // Simple JPEG header for a grayscale image
+    // SOI marker
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xD8);
+    
+    // APP0 marker (JFIF identifier)
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xE0);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x10);
+    thumbnail.push_back('J');
+    thumbnail.push_back('F');
+    thumbnail.push_back('I');
+    thumbnail.push_back('F');
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x01);
+    thumbnail.push_back(0x01);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x01);
+    thumbnail.push_back(0x01);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x00);
+    
+    // DQT marker (Define Quantization Table)
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xDB);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x43);
+    thumbnail.push_back(0x00);
+    
+    // Standard quantization table (64 bytes)
+    for (int i = 0; i < 64; i++)
+    {
+        thumbnail.push_back(16); // Simple flat quantization
+    }
+    
+    // SOF0 marker (Start of Frame, baseline DCT)
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xC0);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x11);
+    thumbnail.push_back(0x08); // Precision
+    thumbnail.push_back(height >> 8);
+    thumbnail.push_back(height & 0xFF);
+    thumbnail.push_back(width >> 8);
+    thumbnail.push_back(width & 0xFF);
+    thumbnail.push_back(0x01); // Number of components
+    thumbnail.push_back(0x01); // Component ID
+    thumbnail.push_back(0x11); // Sampling factors
+    thumbnail.push_back(0x00); // Quantization table selector
+    
+    // DHT marker (Define Huffman Table) - simplified
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xC4);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x1F);
+    thumbnail.push_back(0x00); // DC table
+    
+    // Simplified Huffman table
+    for (int i = 0; i < 16; i++)
+    {
+        thumbnail.push_back(0);
+    }
+    for (int i = 0; i < 12; i++)
+    {
+        thumbnail.push_back(i);
+    }
+    
+    // SOS marker (Start of Scan)
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xDA);
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x08);
+    thumbnail.push_back(0x01); // Number of components
+    thumbnail.push_back(0x01); // Component selector
+    thumbnail.push_back(0x00); // DC/AC table selectors
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x3F);
+    thumbnail.push_back(0x00);
+    
+    // Minimal scan data (single MCU)
+    thumbnail.push_back(0x00);
+    thumbnail.push_back(0x01);
+    thumbnail.push_back(0x02);
+    thumbnail.push_back(0x03);
+    thumbnail.push_back(0x04);
+    thumbnail.push_back(0x05);
+    thumbnail.push_back(0x06);
+    thumbnail.push_back(0x07);
+    thumbnail.push_back(0x08);
+    thumbnail.push_back(0x09);
+    thumbnail.push_back(0x0A);
+    thumbnail.push_back(0x0B);
+    
+    // EOI marker
+    thumbnail.push_back(0xFF);
+    thumbnail.push_back(0xD9);
+    
+    // Cache the thumbnail
+    thumbnails_[id] = thumbnail;
+    
+    // Save to file
+    std::string path = generateThumbnailPath(id);
+    try
+    {
+        std::ofstream file(path, std::ios::binary);
+        if (file.is_open())
+        {
+            file.write(reinterpret_cast<const char*>(thumbnail.data()), thumbnail.size());
+            file.close();
+            LOG_INFO("Thumbnail saved to: {}", path);
+        }
+    }
+    catch (const std::exception& e)
+    {
+        LOG_ERROR("Failed to save thumbnail: {}", e.what());
+    }
+    
+    return thumbnail;
 }
 
 } // namespace embed::bmcweb::streaming

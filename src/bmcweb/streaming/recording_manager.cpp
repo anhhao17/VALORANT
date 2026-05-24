@@ -8,9 +8,19 @@
 namespace embed::bmcweb::streaming
 {
 
-RecordingManager::RecordingManager() : recordingPath_("/var/lib/jetson/recordings"), recordingEnabled_(false)
+RecordingManager::RecordingManager() : recordingPath_("/tmp/jetson_recordings"), recordingEnabled_(false)
 {
     LOG_INFO("Recording manager initialized");
+    
+    // Create recording directory
+    try
+    {
+        std::filesystem::create_directories(recordingPath_);
+    }
+    catch (const std::exception& e)
+    {
+        LOG_ERROR("Failed to create recording directory: {}", e.what());
+    }
 }
 
 RecordingManager::~RecordingManager()
@@ -32,11 +42,18 @@ RecordingManager::~RecordingManager()
     LOG_INFO("Recording manager shutdown");
 }
 
-std::string RecordingManager::startRecording(const std::string& streamId, const std::string& format)
+std::string RecordingManager::startRecording(const std::string& streamId, const std::string& format, StreamSourceType streamType)
 {
     if (!recordingEnabled_)
     {
         LOG_WARN("Recording is disabled");
+        return "";
+    }
+    
+    // Don't allow recording from file-based streams (only from live sources)
+    if (streamType == StreamSourceType::MP4_FILE)
+    {
+        LOG_WARN("Recording is not supported for file-based streams");
         return "";
     }
     

@@ -2,6 +2,8 @@
 #include "../streaming/streamer.hpp"
 #include "../logging.hpp"
 #include <boost/beast/http/field.hpp>
+#include <fstream>
+#include <iterator>
 
 namespace embed::bmcweb::routes
 {
@@ -35,6 +37,7 @@ void registerStreamingRoutes(App& app)
                     streamJson["loop"] = stream.loop;
                     streamJson["quality"] = stream.quality;
                     streamJson["streaming"] = streamer.isStreaming(stream.id);
+                    streamJson["supportsRecording"] = (stream.type != streaming::StreamSourceType::MP4_FILE);
                     response.push_back(streamJson);
                 }
 
@@ -727,6 +730,85 @@ void registerStreamingRoutes(App& app)
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error deleting recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/streams/{id}/thumbnail - Get or generate stream thumbnail
+    JETSON_ROUTE(app, "/api/streams/*/thumbnail")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("GET {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/thumbnail");
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string streamId = target.substr(pos + 13, endPos - pos - 13);
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                
+                // Check if thumbnail exists
+                std::string thumbnailPath = streamer.getThumbnailPath(streamId);
+                if (thumbnailPath.empty())
+                {
+                    // Generate thumbnail with default size
+                    auto thumbnail = streamer.generateThumbnail(streamId);
+                    if (thumbnail.empty())
+                    {
+                        asyncResp->res.result(status::not_found);
+                        asyncResp->res.set(field::content_type, "application/json");
+                        asyncResp->res.body("{\"error\":\"Stream not found or no video data\"}");
+                        return;
+                    }
+                    thumbnailPath = streamer.getThumbnailPath(streamId);
+                }
+
+                // Read thumbnail file
+                std::ifstream file(thumbnailPath, std::ios::binary);
+                if (!file.is_open())
+                {
+                    asyncResp->res.result(status::internal_server_error);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to read thumbnail\"}");
+                    return;
+                }
+
+                std::vector<uint8_t> thumbnailData((std::istreambuf_iterator<char>(file)),
+                                                   std::istreambuf_iterator<char>());
+                file.close();
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "image/jpeg");
+                std::string bodyStr(reinterpret_cast<const char*>(thumbnailData.data()),
+                                   thumbnailData.size());
+                asyncResp->res.body(bodyStr);
+
+                LOG_INFO("Thumbnail served for stream: {}", streamId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting thumbnail: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");

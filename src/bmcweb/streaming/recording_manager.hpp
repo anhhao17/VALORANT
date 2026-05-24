@@ -26,7 +26,7 @@ class RecordingManager
     }
     
     // Recording operations
-    std::string startRecording(const std::string& streamId, const std::string& format = "mp4");
+    std::string startRecording(const std::string& streamId, const std::string& format = "mp4", StreamSourceType streamType = StreamSourceType::MP4_FILE);
     bool stopRecording(const std::string& recordingId);
     bool pauseRecording(const std::string& recordingId);
     bool resumeRecording(const std::string& recordingId);

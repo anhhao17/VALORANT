@@ -19,7 +19,7 @@ class AuthTester:
         self.csrf_token: Optional[str] = None
         self.username: Optional[str] = None
     
-    def login(self, username: str = "admin", password: str = "password") -> Tuple[bool, Optional[Dict[str, Any]]]:
+    def login(self, username: str = "admin", password: str = "admin") -> Tuple[bool, Optional[Dict[str, Any]]]:
         """
         Login and store session tokens
         
@@ -176,7 +176,7 @@ def run_auth_tests(base_url: str = "http://localhost:8080") -> Dict[str, bool]:
     auth = AuthTester(base_url)
     
     # Test 1: Login with valid credentials
-    success, data = auth.login("admin", "password")
+    success, data = auth.login("admin", "admin")
     results["Login with valid credentials"] = success and "sessionToken" in data
     
     # Test 2: Login with invalid credentials
@@ -184,7 +184,7 @@ def run_auth_tests(base_url: str = "http://localhost:8080") -> Dict[str, bool]:
     results["Login with invalid credentials"] = not success  # Should fail
     
     # Login again for subsequent tests
-    auth.login("admin", "password")
+    auth.login("admin", "admin")
     
     # Test 3: Get session info
     success, data = auth.get_session_info()
@@ -202,7 +202,7 @@ def run_auth_tests(base_url: str = "http://localhost:8080") -> Dict[str, bool]:
     # For CSRF test, we need to use cookie-based authentication
     # Create a session with cookies
     session = requests.Session()
-    login_response = session.post(f"{base_url}/api/login", json={"username": "admin", "password": "password"})
+    login_response = session.post(f"{base_url}/api/login", json={"username": "admin", "password": "admin"})
     
     if login_response.status_code == 200:
         # Try POST without CSRF token using the session (which has the cookie)

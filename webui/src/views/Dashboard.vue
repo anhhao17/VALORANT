@@ -10,6 +10,14 @@
         <p v-else>Loading...</p>
       </div>
       
+      <!-- Streaming Status Card -->
+      <div class="card">
+        <h3>Streaming</h3>
+        <p v-if="streamingStats">{{ streamingStats.active }}/{{ streamingStats.total }} Active</p>
+        <p v-else>Loading...</p>
+        <router-link to="/streaming" class="btn-link">Manage Streams →</router-link>
+      </div>
+      
       <!-- Temperature Gauge -->
       <div class="card">
         <h3>Temperature</h3>
@@ -77,6 +85,7 @@ import GaugeChart from '../components/GaugeChart.vue'
 const systemStatus = ref(null)
 const temperature = ref(null)
 const power = ref(null)
+const streamingStats = ref({ active: 0, total: 0 })
 const isWebSocketConnected = ref(false)
 
 // Historical data for charts
@@ -240,6 +249,28 @@ const handleSensorData = (data) => {
   }
 }
 
+const loadStreamingStats = async () => {
+  try {
+    const authStore = useAuthStore()
+    const response = await fetch('/api/streams', {
+      headers: {
+        'Authorization': `Token ${authStore.sessionToken}`
+      }
+    })
+    
+    if (response.ok) {
+      const streams = await response.json()
+      const active = streams.filter(s => s.streaming).length
+      streamingStats.value = {
+        active,
+        total: streams.length
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load streaming stats:', error)
+  }
+}
+
 onMounted(async () => {
   try {
     // Load initial data via HTTP
@@ -251,6 +282,9 @@ onMounted(async () => {
 
     const powerResponse = await hwmonApi.getPower()
     power.value = powerResponse.data
+
+    // Load streaming stats
+    await loadStreamingStats()
 
     // Initialize chart data with current readings
     const now = new Date().toLocaleTimeString()
@@ -361,5 +395,17 @@ onUnmounted(() => {
   50% {
     opacity: 0.5;
   }
+}
+
+.btn-link {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  display: inline-block;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
 }
 </style>

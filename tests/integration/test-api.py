@@ -15,7 +15,7 @@ from test_auth import AuthTester, run_auth_tests
 HOST = "localhost"
 PORT = 8080
 BASE_URL = f"http://{HOST}:{PORT}"
-AUTH = ("admin", "password")
+AUTH = ("admin", "admin")
 
 # Test counters
 total_tests = 0
@@ -201,6 +201,58 @@ def main():
     # Error cases
     test_endpoint("Non-existent endpoint", "/api/nonexistent", 404)
     test_endpoint("Invalid auth header", "/api/test", 401, use_auth=False)
+    
+    print()
+    print("Testing streaming endpoints with authentication...")
+    
+    # Test streaming endpoints using AuthTester
+    auth.login()
+    
+    # Test list streams
+    success, data = auth.make_authenticated_request("GET", "/api/streams")
+    print_result("List streams", "PASS" if success else "FAIL")
+    
+    # Test add stream
+    stream_data = {
+        "id": "test_stream_1",
+        "name": "Test Stream 1",
+        "type": 0,  # MP4_FILE
+        "sourcePath": "/tmp/test.mp4",
+        "loop": True,
+        "quality": 80
+    }
+    success, data = auth.make_authenticated_request("POST", "/api/streams", data=stream_data)
+    print_result("Add stream", "PASS" if success else "FAIL")
+    
+    # Test get stream
+    success, data = auth.make_authenticated_request("GET", "/api/streams/test_stream_1")
+    print_result("Get stream", "PASS" if success else "FAIL")
+    
+    # Test stream statistics
+    success, data = auth.make_authenticated_request("GET", "/api/streams/test_stream_1/stats")
+    print_result("Stream statistics", "PASS" if success else "FAIL")
+    
+    # Test start streaming
+    success, data = auth.make_authenticated_request("POST", "/api/streams/test_stream_1/start")
+    print_result("Start streaming", "PASS" if success else "FAIL")
+    
+    # Test stop streaming
+    success, data = auth.make_authenticated_request("POST", "/api/streams/test_stream_1/stop")
+    print_result("Stop streaming", "PASS" if success else "FAIL")
+    
+    # Test recording (should fail for file-based streams)
+    success, data = auth.make_authenticated_request("POST", "/api/streams/test_stream_1/record", data={"format": "mp4"})
+    print_result("Recording from file (should fail)", "PASS" if not success else "FAIL")
+    
+    # Test list recordings
+    success, data = auth.make_authenticated_request("GET", "/api/recordings")
+    print_result("List recordings", "PASS" if success else "FAIL")
+    
+    # Test delete stream
+    success, data = auth.make_authenticated_request("DELETE", "/api/streams/test_stream_1")
+    print_result("Delete stream", "PASS" if success else "FAIL")
+    
+    auth.logout()
     
     print()
     print("=" * 50)

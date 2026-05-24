@@ -5,6 +5,7 @@ import System from '../views/System.vue'
 import Hardware from '../views/Hardware.vue'
 import Configuration from '../views/Configuration.vue'
 import Users from '../views/Users.vue'
+import Streaming from '../views/Streaming.vue'
 import Login from '../views/Login.vue'
 
 const routes = [
@@ -41,6 +42,12 @@ const routes = [
     path: '/users',
     name: 'Users',
     component: Users,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/streaming',
+    name: 'Streaming',
+    component: Streaming,
     meta: { requiresAuth: true }
   }
 ]
