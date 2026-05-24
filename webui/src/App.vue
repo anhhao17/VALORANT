@@ -1,12 +1,16 @@
 <template>
   <div id="app">
-    <nav class="navbar">
+    <nav v-if="showNavbar" class="navbar">
       <div class="container">
         <h1 class="logo">Jetson BMCweb</h1>
         <ul class="nav-links">
           <li><router-link to="/">Dashboard</router-link></li>
           <li><router-link to="/system">System</router-link></li>
           <li><router-link to="/hwmon">Hardware</router-link></li>
+          <li v-if="authStore.isAuthenticated" class="user-info">
+            <span>{{ authStore.user }}</span>
+            <button @click="handleLogout" class="logout-btn">Logout</button>
+          </li>
         </ul>
       </div>
     </nav>
@@ -17,6 +21,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAuthStore } from './store/auth'
+
+const route = useRoute()
+const authStore = useAuthStore()
+
+const showNavbar = computed(() => {
+  return route.name !== 'Login'
+})
+
+const handleLogout = async () => {
+  await authStore.logout()
+}
 </script>
 
 <style scoped>
@@ -56,6 +74,32 @@
 
 .nav-links a:hover {
   color: #4CAF50;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.user-info span {
+  color: white;
+  font-weight: bold;
+}
+
+.logout-btn {
+  padding: 0.5rem 1rem;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.logout-btn:hover {
+  background-color: #d32f2f;
 }
 
 .main-content {

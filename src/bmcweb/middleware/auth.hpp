@@ -12,7 +12,7 @@ namespace jetson::bmcweb::middleware
  * @brief Authentication middleware
  * 
  * Validates authentication credentials from requests.
- * Supports basic authentication with username/password.
+ * Supports cookie-based authentication, token authentication, and basic authentication.
  */
 class AuthMiddleware : public Middleware
 {
@@ -29,6 +29,10 @@ class AuthMiddleware : public Middleware
 
    private:
     std::unordered_map<std::string, std::string> users_;
+    bool validateCookieAuth(const Request& req);
+    bool validateTokenAuth(const Request& req);
+    bool validateBasicAuth(const Request& req);
+    bool validateCsrfToken(const Request& req, const std::string& csrfToken);
 };
 
 } // namespace jetson::bmcweb::middleware

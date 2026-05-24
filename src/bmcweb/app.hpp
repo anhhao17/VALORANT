@@ -67,6 +67,14 @@ class App
                              });
     }
 
+    /**
+     * @brief Find a handler for testing purposes
+     */
+    std::function<void(const Request&, const std::shared_ptr<AsyncResp>&)> findHandler(const std::string& path)
+    {
+        return router_.findHandler(path);
+    }
+
    private:
     routing::Router router_;
     middleware::MiddlewareChain middlewares_;

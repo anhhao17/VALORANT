@@ -8,6 +8,7 @@
 #include "bmcweb/logging.hpp"
 #include "bmcweb/middleware/auth.hpp"
 #include "bmcweb/middleware/cors.hpp"
+#include "bmcweb/routes/auth.hpp"
 #include "bmcweb/routes/hwmon.hpp"
 #include "bmcweb/routes/system.hpp"
 #include "bmcweb/server.hpp"
@@ -38,6 +39,10 @@ int main()
     auto authMiddleware = std::make_shared<jetson::bmcweb::middleware::AuthMiddleware>();
     authMiddleware->addUser("admin", "password");
     app.addMiddleware(jetson::bmcweb::middleware::makeMiddlewareFunction(authMiddleware));
+
+    // Register authentication routes
+    LOG_INFO("Registering authentication routes");
+    jetson::bmcweb::routes::registerAuthRoutes(app);
 
     // Register system routes
     LOG_INFO("Registering system routes");

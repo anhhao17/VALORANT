@@ -36,10 +36,12 @@ add_executable(jetson
     src/core/main.cpp
     src/bmcweb/logging.cpp
     src/bmcweb/server.cpp
+    src/bmcweb/session.cpp
     src/bmcweb/middleware/cors.cpp
     src/bmcweb/middleware/auth.cpp
     src/bmcweb/routes/system.cpp
     src/bmcweb/routes/hwmon.cpp
+    src/bmcweb/routes/auth.cpp
 )
 
 target_include_directories(jetson PRIVATE

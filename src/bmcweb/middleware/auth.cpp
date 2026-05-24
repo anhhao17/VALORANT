@@ -1,6 +1,7 @@
 #include "auth.hpp"
-
+#include "../session.hpp"
 #include "../logging.hpp"
+#include <boost/beast/http/verb.hpp>
 
 namespace jetson::bmcweb::middleware
 {
@@ -14,6 +15,96 @@ void AuthMiddleware::addUser(const std::string& username, const std::string& pas
 {
     users_[username] = password;
     LOG_DEBUG("User added: {}", username);
+}
+
+bool AuthMiddleware::validateCookieAuth(const Request& req)
+{
+    std::string cookieHeader = req.getHeaderValue(field::cookie);
+    if (cookieHeader.empty())
+    {
+        return false;
+    }
+
+    size_t pos = cookieHeader.find("SESSION=");
+    if (pos == std::string::npos)
+    {
+        return false;
+    }
+
+    size_t start = pos + 8; // "SESSION=" length
+    size_t end = cookieHeader.find(';', start);
+    if (end == std::string::npos)
+    {
+        end = cookieHeader.length();
+    }
+
+    std::string sessionToken = cookieHeader.substr(start, end - start);
+
+    auto& sessionStore = SessionStore::getInstance();
+    auto session = sessionStore.loginSessionByToken(sessionToken);
+
+    if (session)
+    {
+        LOG_DEBUG("Cookie authentication successful for user: {}", session->username);
+        return true;
+    }
+
+    return false;
+}
+
+bool AuthMiddleware::validateTokenAuth(const Request& req)
+{
+    std::string authHeader = req.getHeaderValue(field::authorization);
+    if (authHeader.empty() || authHeader.substr(0, 6) != "Token ")
+    {
+        return false;
+    }
+
+    std::string sessionToken = authHeader.substr(6);
+
+    auto& sessionStore = SessionStore::getInstance();
+    auto session = sessionStore.loginSessionByToken(sessionToken);
+
+    if (session)
+    {
+        LOG_DEBUG("Token authentication successful for user: {}", session->username);
+        return true;
+    }
+
+    return false;
+}
+
+bool AuthMiddleware::validateBasicAuth(const Request& req)
+{
+    std::string authHeader = req.getHeaderValue(field::authorization);
+    if (authHeader.empty() || authHeader.substr(0, 6) != "Basic ")
+    {
+        return false;
+    }
+
+    // For simplicity, accept any Basic auth header
+    // In production, decode base64 and validate credentials
+    LOG_DEBUG("Basic authentication accepted");
+    return true;
+}
+
+bool AuthMiddleware::validateCsrfToken(const Request& req, const std::string& csrfToken)
+{
+    std::string csrfHeader = req.getHeaderValue("X-CSRF-Token");
+    if (csrfHeader.empty())
+    {
+        LOG_WARN("CSRF token missing");
+        return false;
+    }
+
+    if (csrfHeader != csrfToken)
+    {
+        LOG_WARN("CSRF token mismatch");
+        return false;
+    }
+
+    LOG_DEBUG("CSRF token validated");
+    return true;
 }
 
 void AuthMiddleware::process(
@@ -30,33 +121,75 @@ void AuthMiddleware::process(
         return;
     }
 
-    // Check for Authorization header
-    std::string authHeader = req.getHeaderValue(field::authorization);
-
-    if (authHeader.empty())
+    // Skip authentication for login/logout endpoints
+    if (target == "/api/login" || target == "/api/logout" || target == "/api/session")
     {
-        LOG_WARN("Authentication failed: No auth header provided");
-        // No auth header provided
+        LOG_DEBUG("Skipping authentication for auth endpoint: {}", target);
+        next();
+        return;
+    }
+
+    bool authenticated = false;
+    std::string csrfToken;
+
+    // Try cookie authentication first
+    if (validateCookieAuth(req))
+    {
+        authenticated = true;
+        // Get CSRF token from session for validation
+        std::string cookieHeader = req.getHeaderValue(field::cookie);
+        size_t pos = cookieHeader.find("SESSION=");
+        if (pos != std::string::npos)
+        {
+            size_t start = pos + 8;
+            size_t end = cookieHeader.find(';', start);
+            if (end == std::string::npos)
+            {
+                end = cookieHeader.length();
+            }
+            std::string sessionToken = cookieHeader.substr(start, end - start);
+            auto& sessionStore = SessionStore::getInstance();
+            auto session = sessionStore.loginSessionByToken(sessionToken);
+            if (session)
+            {
+                csrfToken = session->csrfToken;
+            }
+        }
+    }
+    // Try token authentication
+    else if (validateTokenAuth(req))
+    {
+        authenticated = true;
+    }
+    // Try basic authentication as fallback
+    else if (validateBasicAuth(req))
+    {
+        authenticated = true;
+    }
+
+    if (!authenticated)
+    {
+        LOG_WARN("Authentication failed for route: {}", target);
         asyncResp->res.result(status::unauthorized);
         asyncResp->res.body("{\"error\":\"Authentication required\"}");
         return;
     }
 
-    // Parse Basic auth header (format: "Basic base64(username:password)")
-    if (authHeader.substr(0, 6) != "Basic ")
+    // Validate CSRF token for state-changing requests
+    if (req.method() != boost::beast::http::verb::get &&
+        req.method() != boost::beast::http::verb::head &&
+        req.method() != boost::beast::http::verb::options)
     {
-        LOG_WARN("Authentication failed: Invalid auth method");
-        asyncResp->res.result(status::unauthorized);
-        asyncResp->res.body("{\"error\":\"Invalid authentication method\"}");
-        return;
+        if (!csrfToken.empty() && !validateCsrfToken(req, csrfToken))
+        {
+            LOG_WARN("CSRF validation failed for route: {}", target);
+            asyncResp->res.result(status::forbidden);
+            asyncResp->res.body("{\"error\":\"CSRF token validation failed\"}");
+            return;
+        }
     }
 
-    // For simplicity, we'll just check if the header exists
-    // In production, you'd decode the base64 and validate credentials
-    // This is a minimal implementation for demonstration
-
-    LOG_DEBUG("Authentication successful");
-    // Continue to next middleware if auth is present
+    LOG_DEBUG("Authentication successful for route: {}", target);
     next();
 }
 

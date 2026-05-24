@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <ranges>
 #include <string>
@@ -99,6 +100,26 @@ class Router
             LOG_DEBUG("No route found for: {}", url);
             asyncResp->res.result(http::status::not_found);
         }
+    }
+
+    /**
+     * @brief Find a handler for testing purposes
+     * @param path URL path
+     * @return Handler function or nullptr if not found
+     */
+    std::function<void(const Request&, const std::shared_ptr<AsyncResp>&)> findHandler(const std::string& path)
+    {
+        std::string url = path;
+        auto [ruleIndex, params] = trie_.find(url);
+
+        if (ruleIndex > 0 && ruleIndex <= allRules_.size())
+        {
+            return [this, ruleIndex](const Request& req, const std::shared_ptr<AsyncResp>& asyncResp) {
+                allRules_[ruleIndex - 1]->handle(req, asyncResp);
+            };
+        }
+
+        return nullptr;
     }
 
    private:
