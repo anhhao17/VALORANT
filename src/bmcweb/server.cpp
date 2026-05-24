@@ -165,10 +165,18 @@ void HttpServer::run()
     // The io_context is required for all I/O
     asio::io_context ioc{threads};
 
-    // Create and launch a listening port
+    // Create and launch a listening port for HTTP
     std::make_shared<HttpListener>(
         ioc, tcp::endpoint{asio::ip::make_address(address_), port_}, app_)
         ->run();
+
+    // Create and launch a listening port for WebSocket (port + 1)
+    unsigned short ws_port = port_ + 1;
+    websocket_listener_ = std::make_shared<WebSocketListener>(
+        ioc, tcp::endpoint{asio::ip::make_address(address_), ws_port}, app_);
+    websocket_listener_->run();
+    
+    LOG_INFO("WebSocket listener configured on {}:{}", address_, ws_port);
 
     // Capture SIGINT and SIGTERM to perform a clean shutdown
     asio::signal_set signals(ioc, SIGINT, SIGTERM);

@@ -25,11 +25,13 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/logging.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/server.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/session.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/websocket.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/middleware/cors.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/middleware/auth.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/system.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/hwmon.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/auth.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/websocket.cpp
 )
 
 target_include_directories(jetson_tests PRIVATE

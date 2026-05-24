@@ -11,6 +11,7 @@
 #include "bmcweb/routes/auth.hpp"
 #include "bmcweb/routes/hwmon.hpp"
 #include "bmcweb/routes/system.hpp"
+#include "bmcweb/routes/websocket.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
 
@@ -51,6 +52,10 @@ int main()
     // Register hardware monitoring routes
     LOG_INFO("Registering hardware monitoring routes");
     jetson::bmcweb::routes::registerHwMonRoutes(app);
+
+    // Register WebSocket routes
+    LOG_INFO("Registering WebSocket routes");
+    jetson::bmcweb::routes::WebSocketRoutes::registerRoutes();
 
     // Register static file routes (WebUI)
     LOG_INFO("Registering static file routes");

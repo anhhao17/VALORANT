@@ -13,6 +13,7 @@
 #include "http/request.hpp"
 #include "http/response.hpp"
 #include "logging.hpp"
+#include "websocket.hpp"
 
 namespace jetson::bmcweb
 {
@@ -73,6 +74,7 @@ class HttpListener : public std::enable_shared_from_this<HttpListener>
  * @brief HTTP server
  *
  * Manages the IO context and starts the listener.
+ * Also manages WebSocket listener for real-time streaming.
  */
 class HttpServer
 {
@@ -89,6 +91,7 @@ class HttpServer
     App& app_;
     std::string address_;
     unsigned short port_;
+    std::shared_ptr<WebSocketListener> websocket_listener_;
 };
 
 }  // namespace jetson::bmcweb
