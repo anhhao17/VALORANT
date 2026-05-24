@@ -1,83 +1,53 @@
-# ── test_config_manager ───────────────────────────────────────────────────────
-add_executable(test_config_manager
-    unit/test_config_manager.cpp
-)
-target_link_libraries(test_config_manager PRIVATE
-    jetson_core
-    gtest_main
-)
-add_test(NAME test_config_manager COMMAND test_config_manager)
+# Tests for Jetson BMCweb
 
-# ── test_jwt_manager ──────────────────────────────────────────────────────────
-add_executable(test_jwt_manager
-    unit/test_jwt_manager.cpp
-)
-target_link_libraries(test_jwt_manager PRIVATE
-    jetson_auth
-    gtest_main
-)
-add_test(NAME test_jwt_manager COMMAND test_jwt_manager)
+# Find Google Test
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+    message(STATUS "Google Test not found, using FetchContent")
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.14.0
+        GIT_SHALLOW    TRUE
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
 
-# ── test_router ───────────────────────────────────────────────────────────────
-add_executable(test_router
-    unit/test_router.cpp
+# Test executable
+add_executable(jetson_tests
+    test_routing.cpp
+    test_http_wrappers.cpp
+    test_middleware.cpp
+    test_api_endpoints.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/logging.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/server.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/middleware/cors.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/middleware/auth.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/system.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/hwmon.cpp
 )
-target_link_libraries(test_router PRIVATE
-    jetson_http
-    gtest_main
-)
-add_test(NAME test_router COMMAND test_router)
 
-# ── test_password_manager ─────────────────────────────────────────────────────
-add_executable(test_password_manager
-    unit/test_password_manager.cpp
+target_include_directories(jetson_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${Boost_INCLUDE_DIRS}
 )
-target_link_libraries(test_password_manager PRIVATE
-    jetson_auth
-    gtest_main
-    OpenSSL::Crypto
-)
-add_test(NAME test_password_manager COMMAND test_password_manager)
 
-# ── test_frame_buffer ───────────────────────────────────────────────────────
-add_executable(test_frame_buffer
-    unit/test_frame_buffer.cpp
+target_link_libraries(jetson_tests PRIVATE
+    GTest::gtest
+    GTest::gtest_main
+    Boost::system
+    Boost::filesystem
+    Boost::iostreams
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    pthread
 )
-target_link_libraries(test_frame_buffer PRIVATE
-    jetson_streaming
-    gtest_main
-)
-add_test(NAME test_frame_buffer COMMAND test_frame_buffer)
 
-# ── test_video_sources ───────────────────────────────────────────────────────
-add_executable(test_video_sources
-    unit/test_video_sources.cpp
-)
-target_link_libraries(test_video_sources PRIVATE
-    jetson_streaming
-    gtest_main
-)
-add_test(NAME test_video_sources COMMAND test_video_sources)
-
-# ── test_utils ───────────────────────────────────────────────────────────────
-add_executable(test_utils
-    unit/test_utils.cpp
-)
-target_link_libraries(test_utils PRIVATE
-    jetson_core
-    gtest_main
-)
-add_test(NAME test_utils COMMAND test_utils)
-
-# ── test_hwmon ───────────────────────────────────────────────────────────────
-add_executable(test_hwmon
-    test_hwmon.cpp
-)
-target_link_libraries(test_hwmon PRIVATE
-    jetson_hwmon
-    gtest_main
-)
-target_include_directories(test_hwmon PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/hwmon
-)
-add_test(NAME test_hwmon COMMAND test_hwmon)
+# Register tests
+add_test(NAME routing_test COMMAND jetson_tests --gtest_filter=RoutingTest.*)
+add_test(NAME http_wrappers_test COMMAND jetson_tests --gtest_filter=HttpWrappersTest.*)
+add_test(NAME middleware_test COMMAND jetson_tests --gtest_filter=MiddlewareTest.*)
+add_test(NAME api_endpoints_test COMMAND jetson_tests --gtest_filter=ApiEndpointsTest.*)

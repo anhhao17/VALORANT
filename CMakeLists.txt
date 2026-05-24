@@ -24,6 +24,13 @@ find_package(spdlog 1.10 REQUIRED)
 # Add additional Boost components needed for Beast
 find_package(Boost 1.83 REQUIRED COMPONENTS iostreams)
 
+# Enable testing
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 # Main executable
 add_executable(jetson
     src/core/main.cpp
