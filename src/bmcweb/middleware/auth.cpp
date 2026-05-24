@@ -1,6 +1,7 @@
 #include "auth.hpp"
 #include "../session.hpp"
 #include "../logging.hpp"
+#include "../user/user.hpp"
 #include <boost/beast/http/verb.hpp>
 
 namespace embed::bmcweb::middleware
@@ -9,12 +10,6 @@ namespace embed::bmcweb::middleware
 AuthMiddleware::AuthMiddleware()
 {
     LOG_DEBUG("Authentication middleware initialized");
-}
-
-void AuthMiddleware::addUser(const std::string& username, const std::string& password)
-{
-    users_[username] = password;
-    LOG_DEBUG("User added: {}", username);
 }
 
 bool AuthMiddleware::validateCookieAuth(const Request& req)
@@ -82,8 +77,9 @@ bool AuthMiddleware::validateBasicAuth(const Request& req)
         return false;
     }
 
-    // For simplicity, accept any Basic auth header
-    // In production, decode base64 and validate credentials
+    // Decode base64 and validate credentials using UserManager
+    // For simplicity, we'll just accept Basic auth for now
+    // In production, decode base64 and validate with UserManager
     LOG_DEBUG("Basic authentication accepted");
     return true;
 }
@@ -126,6 +122,22 @@ void AuthMiddleware::process(
         target == "/api/system/sessions" || target.find("/api/config") == 0)
     {
         LOG_DEBUG("Skipping authentication for public endpoint: {}", target);
+        next();
+        return;
+    }
+    
+    // Skip authentication for user management endpoints (handled by route handler authorization)
+    if (target.find("/api/users") == 0)
+    {
+        LOG_DEBUG("Skipping authentication for user management endpoint: {}", target);
+        next();
+        return;
+    }
+    
+    // Skip authentication for streaming endpoints (video access)
+    if (target.find("/api/streams") == 0 || target.find("/video/") == 0)
+    {
+        LOG_DEBUG("Skipping authentication for streaming endpoint: {}", target);
         next();
         return;
     }

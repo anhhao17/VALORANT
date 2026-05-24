@@ -6,6 +6,7 @@
 #include "bmcweb/http/response.hpp"
 #include "bmcweb/http/types.hpp"
 #include "bmcweb/async_resp.hpp"
+#include "bmcweb/user/user.hpp"
 #include <boost/beast/http.hpp>
 
 using namespace embed::bmcweb;
@@ -61,12 +62,15 @@ TEST_F(MiddlewareTest, AuthMiddlewareInitialization)
 
 TEST_F(MiddlewareTest, AuthMiddlewareAddUser)
 {
-    AuthMiddleware auth;
-    
-    auth.addUser("admin", "password");
+    // Use UserManager instead of AuthMiddleware addUser
+    auto& userManager = user::UserManager::getInstance();
+    userManager.createUser("testuser", "testpass", "user");
     
     // Should not throw
     EXPECT_NO_THROW();
+    
+    // Clean up
+    userManager.deleteUser("testuser");
 }
 
 TEST_F(MiddlewareTest, AuthMiddlewareProcessWithoutAuth)

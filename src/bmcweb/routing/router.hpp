@@ -87,19 +87,26 @@ class Router
     {
         std::string url = req.target();
         LOG_DEBUG("Routing request to: {}", url);
-        auto [ruleIndex, params] = trie_.find(url);
+        auto [ruleIndices, params] = trie_.find(url);
 
-        LOG_DEBUG("Route match result: ruleIndex={}, totalRules={}", ruleIndex, allRules_.size());
+        LOG_DEBUG("Route match result: ruleIndices count={}, totalRules={}", ruleIndices.size(), allRules_.size());
 
-        if (ruleIndex > 0 && ruleIndex <= allRules_.size())
+        // Find the first rule that handles this HTTP method
+        for (unsigned int ruleIndex : ruleIndices)
         {
-            allRules_[ruleIndex - 1]->handle(req, asyncResp);
+            if (ruleIndex > 0 && ruleIndex <= allRules_.size())
+            {
+                if (allRules_[ruleIndex - 1]->handlesMethod(req.method()))
+                {
+                    allRules_[ruleIndex - 1]->handle(req, asyncResp);
+                    return;
+                }
+            }
         }
-        else
-        {
-            LOG_DEBUG("No route found for: {}", url);
-            asyncResp->res.result(http::status::not_found);
-        }
+
+        // No matching rule found
+        LOG_DEBUG("No route found for: {} with method: {}", url, static_cast<int>(req.method()));
+        asyncResp->res.result(http::status::not_found);
     }
 
     /**
@@ -110,12 +117,22 @@ class Router
     std::function<void(const Request&, const std::shared_ptr<AsyncResp>&)> findHandler(const std::string& path)
     {
         std::string url = path;
-        auto [ruleIndex, params] = trie_.find(url);
+        auto [ruleIndices, params] = trie_.find(url);
 
-        if (ruleIndex > 0 && ruleIndex <= allRules_.size())
+        if (!ruleIndices.empty() && ruleIndices[0] > 0 && ruleIndices[0] <= allRules_.size())
         {
-            return [this, ruleIndex](const Request& req, const std::shared_ptr<AsyncResp>& asyncResp) {
-                allRules_[ruleIndex - 1]->handle(req, asyncResp);
+            return [this, ruleIndices](const Request& req, const std::shared_ptr<AsyncResp>& asyncResp) {
+                for (unsigned int ruleIndex : ruleIndices)
+                {
+                    if (ruleIndex > 0 && ruleIndex <= allRules_.size())
+                    {
+                        if (allRules_[ruleIndex - 1]->handlesMethod(req.method()))
+                        {
+                            allRules_[ruleIndex - 1]->handle(req, asyncResp);
+                            return;
+                        }
+                    }
+                }
             };
         }
 

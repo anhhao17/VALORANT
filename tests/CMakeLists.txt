@@ -33,8 +33,12 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/auth.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/websocket.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/config.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/users.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/hardware/sensor.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/config/config.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/user/user.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/streamer.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/authorization/permission.cpp
 )
 
 target_include_directories(jetson_tests PRIVATE

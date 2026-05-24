@@ -18,11 +18,11 @@ namespace embed::bmcweb::routing
 class TrieNode
 {
    public:
-    TrieNode() : isEnd(false), ruleIndex(0) {}
+    TrieNode() : isEnd(false) {}
 
     std::unordered_map<char, std::shared_ptr<TrieNode>> children;
     bool isEnd;
-    unsigned int ruleIndex;  // Index of the matching rule
+    std::vector<unsigned int> ruleIndices;  // Indices of matching rules (for different HTTP methods)
 };
 
 /**
@@ -53,41 +53,88 @@ class Trie
             current = current->children[c];
         }
         current->isEnd = true;
-        current->ruleIndex = ruleIndex;
+        current->ruleIndices.push_back(ruleIndex);
     }
 
     /**
      * @brief Find matching rule for a URL
      * @param url Request URL to match
-     * @return Pair of rule index and extracted parameters
+     * @return Pair of rule indices and extracted parameters
      */
-    std::pair<unsigned int, std::vector<std::string>> find(const std::string& url) const
+    std::pair<std::vector<unsigned int>, std::vector<std::string>> find(const std::string& url) const
     {
         auto current = root_;
         std::vector<std::string> params;
 
         if (url.empty())
         {
-            return {0, params};
+            return {{}, params};
         }
 
+        // Try exact match first
+        auto exactMatch = root_;
+        bool exactMatchFound = true;
+        
         for (char c : url)
         {
+            if (exactMatch->children.find(c) == exactMatch->children.end())
+            {
+                exactMatchFound = false;
+                break;
+            }
+            exactMatch = exactMatch->children[c];
+        }
+
+        if (exactMatchFound && exactMatch->isEnd)
+        {
+            return {exactMatch->ruleIndices, params};
+        }
+
+        // Try wildcard matching
+        current = root_;
+        std::string prefix;
+        
+        for (size_t i = 0; i < url.length(); i++)
+        {
+            char c = url[i];
             if (current->children.find(c) == current->children.end())
             {
-                return {0, params};  // No match - character not found
+                // Check if current node has a wildcard child
+                if (current->children.find('*') != current->children.end())
+                {
+                    // Found wildcard, match the rest
+                    current = current->children['*'];
+                    params.push_back(url.substr(i));
+                    if (current->isEnd)
+                    {
+                        return {current->ruleIndices, params};
+                    }
+                }
+                return {{}, params};  // No match
             }
             current = current->children[c];
+            prefix += c;
+            
+            // Check if current node has a wildcard child (for patterns like "/api/users/*")
+            if (current->children.find('*') != current->children.end())
+            {
+                auto wildcardNode = current->children['*'];
+                if (wildcardNode->isEnd && i < url.length() - 1)
+                {
+                    // Wildcard matches the rest of the URL
+                    params.push_back(url.substr(i + 1));
+                    return {wildcardNode->ruleIndices, params};
+                }
+            }
         }
 
-        // Only return a match if we're at an exact endpoint
-        // This ensures we consumed ALL characters and are at a valid endpoint
+        // Check if we're at an endpoint
         if (current->isEnd)
         {
-            return {current->ruleIndex, params};
+            return {current->ruleIndices, params};
         }
 
-        return {0, params};  // No match - we consumed all characters but not at an endpoint
+        return {{}, params};  // No match
     }
 
     /**

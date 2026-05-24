@@ -4,6 +4,7 @@ import Dashboard from '../views/Dashboard.vue'
 import System from '../views/System.vue'
 import Hardware from '../views/Hardware.vue'
 import Configuration from '../views/Configuration.vue'
+import Users from '../views/Users.vue'
 import Login from '../views/Login.vue'
 
 const routes = [
@@ -34,6 +35,12 @@ const routes = [
     path: '/configuration',
     name: 'Configuration',
     component: Configuration,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/users',
+    name: 'Users',
+    component: Users,
     meta: { requiresAuth: true }
   }
 ]

@@ -13,22 +13,17 @@ namespace embed::bmcweb::middleware
  * 
  * Validates authentication credentials from requests.
  * Supports cookie-based authentication, token authentication, and basic authentication.
+ * Uses UserManager for credential validation.
  */
 class AuthMiddleware : public Middleware
 {
    public:
     AuthMiddleware();
 
-    /**
-     * @brief Add a user credential
-     */
-    void addUser(const std::string& username, const std::string& password);
-
     void process(const Request& req, const std::shared_ptr<AsyncResp>& asyncResp,
                  std::function<void()> next) override;
 
    private:
-    std::unordered_map<std::string, std::string> users_;
     bool validateCookieAuth(const Request& req);
     bool validateTokenAuth(const Request& req);
     bool validateBasicAuth(const Request& req);

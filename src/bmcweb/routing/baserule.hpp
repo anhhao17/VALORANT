@@ -2,8 +2,10 @@
 
 #include "../async_resp.hpp"
 #include "../http/request.hpp"
+#include "../http/types.hpp"
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace embed::bmcweb
 {
@@ -50,8 +52,37 @@ class BaseRule
         return rule;
     }
 
+    /**
+     * @brief Set allowed HTTP methods for this rule
+     */
+    BaseRule& setMethods(const std::vector<Verb>& methods)
+    {
+        methods_ = methods;
+        return *this;
+    }
+
+    /**
+     * @brief Check if this rule handles the given method
+     */
+    bool handlesMethod(Verb method) const
+    {
+        if (methods_.empty())
+        {
+            return true; // If no methods specified, handle all
+        }
+        for (const auto& m : methods_)
+        {
+            if (m == method)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
    protected:
     std::string rule;
+    std::vector<Verb> methods_;
 };
 
 } // namespace routing

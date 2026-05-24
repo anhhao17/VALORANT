@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <thread>
 
 #include "bmcweb/app.hpp"
 #include "bmcweb/async_resp.hpp"
@@ -14,10 +15,13 @@
 #include "bmcweb/routes/system.hpp"
 #include "bmcweb/routes/websocket.hpp"
 #include "bmcweb/routes/config.hpp"
+#include "bmcweb/routes/users.hpp"
+#include "bmcweb/routes/streaming.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
 #include "bmcweb/hardware/sensor.hpp"
 #include "bmcweb/config/config.hpp"
+#include "bmcweb/user/user.hpp"
 
 using namespace embed::bmcweb::http;
 
@@ -126,7 +130,6 @@ int main(int argc, char* argv[])
     // Add authentication middleware
     LOG_INFO("Adding authentication middleware");
     auto authMiddleware = std::make_shared<embed::bmcweb::middleware::AuthMiddleware>();
-    authMiddleware->addUser("admin", "password");
     app.addMiddleware(embed::bmcweb::middleware::makeMiddlewareFunction(authMiddleware));
 
     // Register authentication routes
@@ -145,6 +148,14 @@ int main(int argc, char* argv[])
     LOG_INFO("Registering configuration routes");
     embed::bmcweb::routes::registerConfigRoutes(app);
 
+    // Register user management routes
+    LOG_INFO("Registering user management routes");
+    embed::bmcweb::routes::registerUserRoutes(app);
+
+    // Register streaming routes
+    LOG_INFO("Registering streaming routes");
+    embed::bmcweb::routes::registerStreamingRoutes(app);
+
     // Register WebSocket routes
     LOG_INFO("Registering WebSocket routes");
     embed::bmcweb::routes::WebSocketRoutes::registerRoutes();
@@ -152,6 +163,15 @@ int main(int argc, char* argv[])
     // Register static file routes (WebUI)
     LOG_INFO("Registering static file routes");
     embed::bmcweb::webassets::requestRoutes(app);
+
+    // Initialize UserManager (no longer blocks due to mutex refactoring)
+    LOG_INFO("Initializing UserManager");
+    try {
+        [[maybe_unused]] auto& userManager = embed::bmcweb::user::UserManager::getInstance();
+        LOG_INFO("UserManager initialized successfully");
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to initialize UserManager: {}", e.what());
+    }
 
     // Validate routes
     LOG_INFO("Validating routes");

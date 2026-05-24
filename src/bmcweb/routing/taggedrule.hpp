@@ -38,6 +38,13 @@ class TaggedRule : public BaseRule
     void handle(const Request& req,
                const std::shared_ptr<AsyncResp>& asyncResp) override
     {
+        // Check if this rule handles the request method
+        if (!handlesMethod(req.method()))
+        {
+            asyncResp->res.result(http::status::method_not_allowed);
+            return;
+        }
+        
         // Extract parameters and call handler
         // For now, just call with no parameters
         if (handler_)
@@ -53,9 +60,10 @@ class TaggedRule : public BaseRule
     /**
      * @brief Set the handler function
      */
-    void setHandler(HandlerFunction handler)
+    TaggedRule& setHandler(HandlerFunction handler)
     {
         handler_ = std::move(handler);
+        return *this;
     }
 
    private:
@@ -80,6 +88,13 @@ class TaggedRule<> : public BaseRule
     void handle(const Request& req,
                const std::shared_ptr<AsyncResp>& asyncResp) override
     {
+        // Check if this rule handles the request method
+        if (!handlesMethod(req.method()))
+        {
+            asyncResp->res.result(http::status::method_not_allowed);
+            return;
+        }
+        
         if (handler_)
         {
             handler_(req, asyncResp);
@@ -90,9 +105,10 @@ class TaggedRule<> : public BaseRule
         }
     }
 
-    void setHandler(HandlerFunction handler)
+    TaggedRule& setHandler(HandlerFunction handler)
     {
         handler_ = std::move(handler);
+        return *this;
     }
 
    private:

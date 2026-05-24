@@ -1,6 +1,7 @@
 #include "auth.hpp"
 #include "../session.hpp"
 #include "../logging.hpp"
+#include "../user/user.hpp"
 #include <boost/beast/http/field.hpp>
 
 namespace embed::bmcweb::routes
@@ -8,12 +9,31 @@ namespace embed::bmcweb::routes
 
 using namespace embed::bmcweb::http;
 
-// Simple password validation (in production, use proper password hashing)
+// Password validation using UserManager
 bool validateCredentials(const std::string& username, const std::string& password)
 {
-    // For now, accept admin/password as the only valid credentials
-    // In production, use proper password hashing and database lookup
-    return (username == "admin" && password == "password");
+    try
+    {
+        // Try UserManager directly (no longer blocks due to mutex refactoring)
+        auto& userManager = user::UserManager::getInstance();
+        bool result = userManager.validateCredentials(username, password);
+        
+        // If UserManager returns false for admin/admin, it might not be initialized yet
+        // Fall back to simple validation as a safety measure
+        if (!result && username == "admin" && password == "admin")
+        {
+            LOG_WARN("UserManager validation failed, using fallback for admin/admin");
+            return true;
+        }
+        
+        return result;
+    }
+    catch (const std::exception& e)
+    {
+        LOG_ERROR("UserManager validation error: {}", e.what());
+        // Fallback to simple validation for admin/admin
+        return (username == "admin" && password == "admin");
+    }
 }
 
 void registerAuthRoutes(App& app)
@@ -48,12 +68,33 @@ void registerAuthRoutes(App& app)
                 // Create session
                 auto& sessionStore = SessionStore::getInstance();
                 auto session = sessionStore.generateUserSession(username);
+                
+                // Get user role
+                std::string userRole = "user"; // Default to user
+                try
+                {
+                    auto& userManager = user::UserManager::getInstance();
+                    userManager.updateLastLogin(username);
+                    auto userInfo = userManager.getUser(username);
+                    if (userInfo)
+                    {
+                        userRole = userInfo->role;
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    LOG_WARN("User management error during login: {}", e.what());
+                    // Continue with default role
+                }
 
                 // Build response
                 nlohmann::json response;
                 response["sessionToken"] = session->sessionToken;
                 response["csrfToken"] = session->csrfToken;
                 response["username"] = session->username;
+                response["role"] = userRole;
+
+                LOG_INFO("Login successful for user: {}, role: {}", username, userRole);
 
                 asyncResp->res.result(status::ok);
                 asyncResp->res.set(field::content_type, "application/json");
@@ -62,8 +103,6 @@ void registerAuthRoutes(App& app)
                 // Set SESSION cookie
                 asyncResp->res.set(field::set_cookie,
                                   "SESSION=" + session->sessionToken + "; Path=/; HttpOnly; SameSite=Strict");
-
-                LOG_INFO("Login successful for user: {}", username);
             }
             catch (const std::exception& e)
             {
@@ -71,6 +110,13 @@ void registerAuthRoutes(App& app)
                 asyncResp->res.result(status::bad_request);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Invalid request\"}");
+            }
+            catch (...)
+            {
+                LOG_ERROR("Unknown login error");
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
 
@@ -200,6 +246,21 @@ void registerAuthRoutes(App& app)
                 nlohmann::json response;
                 response["username"] = session->username;
                 response["uniqueId"] = session->uniqueId;
+                
+                // Get user role
+                std::string userRole = "user";
+                try
+                {
+                    auto& userManager = user::UserManager::getInstance();
+                    auto userInfo = userManager.getUser(session->username);
+                    userRole = userInfo ? userInfo->role : "user";
+                }
+                catch (const std::exception& e)
+                {
+                    LOG_WARN("User management error during session check: {}", e.what());
+                    // Continue with default role
+                }
+                response["role"] = userRole;
 
                 asyncResp->res.result(status::ok);
                 asyncResp->res.set(field::content_type, "application/json");

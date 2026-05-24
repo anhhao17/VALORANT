@@ -591,19 +591,19 @@ void HttpServer::run()
     // The io_context is required for all I/O
     asio::io_context ioc{threads};
 
-    // Create and launch a listening port for HTTP (also handles WebSocket upgrades)
-    std::make_shared<HttpListener>(
-        ioc, tcp::endpoint{asio::ip::make_address(address_), port_}, app_, use_ssl_, cert_file_, key_file_)
-        ->run();
-
-    LOG_INFO("HTTP server (with WebSocket upgrade support) configured on {}:{} (SSL: {})", address_, port_, use_ssl_);
-
     // Capture SIGINT and SIGTERM to perform a clean shutdown
     asio::signal_set signals(ioc, SIGINT, SIGTERM);
     signals.async_wait([&](beast::error_code const&, int) {
         LOG_INFO("Shutdown signal received");
         ioc.stop();
     });
+
+    // Create and launch a listening port for HTTP (also handles WebSocket upgrades)
+    std::make_shared<HttpListener>(
+        ioc, tcp::endpoint{asio::ip::make_address(address_), port_}, app_, use_ssl_, cert_file_, key_file_)
+        ->run();
+
+    LOG_INFO("HTTP server (with WebSocket upgrade support) configured on {}:{} (SSL: {})", address_, port_, use_ssl_);
 
     // Run the I/O service on the requested number of threads
     std::vector<std::thread> v;

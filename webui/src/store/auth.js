@@ -26,7 +26,10 @@ export const useAuthStore = defineStore('auth', () => {
       .then(data => {
         sessionToken.value = data.sessionToken
         csrfToken.value = data.csrfToken
-        user.value = data.username
+        user.value = {
+          username: data.username,
+          role: data.role || 'user' // Default to user if role not provided
+        }
         isAuthenticated.value = true
         return data
       })
@@ -47,6 +50,14 @@ export const useAuthStore = defineStore('auth', () => {
         return response.json()
       })
       .then(() => {
+        sessionToken.value = ''
+        csrfToken.value = ''
+        user.value = null
+        isAuthenticated.value = false
+      })
+      .catch((error) => {
+        // Even if logout API fails, clear local auth state
+        console.error('Logout error:', error)
         sessionToken.value = ''
         csrfToken.value = ''
         user.value = null
@@ -73,7 +84,10 @@ export const useAuthStore = defineStore('auth', () => {
         return response.json()
       })
       .then(data => {
-        user.value = data.username
+        user.value = {
+          username: data.username,
+          role: data.role || 'user'
+        }
         isAuthenticated.value = true
         return data
       })

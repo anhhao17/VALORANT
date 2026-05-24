@@ -45,8 +45,13 @@ add_executable(jetson
     src/bmcweb/routes/auth.cpp
     src/bmcweb/routes/websocket.cpp
     src/bmcweb/routes/config.cpp
+    src/bmcweb/routes/users.cpp
+    src/bmcweb/routes/streaming.cpp
     src/bmcweb/hardware/sensor.cpp
     src/bmcweb/config/config.cpp
+    src/bmcweb/user/user.cpp
+    src/bmcweb/streaming/streamer.cpp
+    src/bmcweb/authorization/permission.cpp
 )
 
 target_include_directories(jetson PRIVATE
