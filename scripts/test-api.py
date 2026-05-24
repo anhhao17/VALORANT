@@ -43,20 +43,24 @@ def test_endpoint(
     expected_status: int,
     use_auth: bool = True,
     method: str = "GET",
-    data: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None
 ) -> Optional[Dict[str, Any]]:
     """Test an API endpoint"""
     url = f"{BASE_URL}{endpoint}"
     
     try:
+        auth = AUTH if use_auth else None
+        req_headers = headers or {}
+        
         if method == "GET":
-            response = requests.get(url, auth=AUTH if use_auth else None)
+            response = requests.get(url, auth=auth, headers=req_headers)
         elif method == "POST":
-            response = requests.post(url, auth=AUTH if use_auth else None, json=data)
+            response = requests.post(url, auth=auth, json=data, headers=req_headers)
         elif method == "PUT":
-            response = requests.put(url, auth=AUTH if use_auth else None, json=data)
+            response = requests.put(url, auth=auth, json=data, headers=req_headers)
         elif method == "DELETE":
-            response = requests.delete(url, auth=AUTH if use_auth else None)
+            response = requests.delete(url, auth=auth, headers=req_headers)
         else:
             print_result(test_name, "FAIL", f"Unsupported method: {method}")
             return None
@@ -137,6 +141,103 @@ def main():
     # Wait for server
     if not wait_for_server():
         sys.exit(1)
+    
+    print()
+    
+    # Test new authentication endpoints
+    print("Testing new authentication endpoints...")
+    
+    # Test login with valid credentials
+    login_response = test_endpoint(
+        "Login with valid credentials",
+        "/api/login",
+        200,
+        use_auth=False,
+        method="POST",
+        data={"username": "admin", "password": "password"}
+    )
+    
+    session_token = None
+    csrf_token = None
+    
+    if login_response and "sessionToken" in login_response:
+        session_token = login_response["sessionToken"]
+        csrf_token = login_response.get("csrfToken", "")
+        print_result("Login response contains sessionToken", "PASS")
+    else:
+        print_result("Login response contains sessionToken", "FAIL")
+    
+    # Test login with invalid credentials
+    test_endpoint(
+        "Login with invalid credentials",
+        "/api/login",
+        401,
+        use_auth=False,
+        method="POST",
+        data={"username": "admin", "password": "wrongpassword"}
+    )
+    
+    # Test session info with valid token
+    if session_token:
+        headers = {"Authorization": f"Token {session_token}"}
+        try:
+            response = requests.get(f"{BASE_URL}/api/session", headers=headers)
+            if response.status_code == 200:
+                print_result("Get session info with valid token", "PASS")
+            else:
+                print_result("Get session info with valid token", "FAIL", f"HTTP {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print_result("Get session info with valid token", "FAIL", str(e))
+    
+    # Test logout with valid token
+    if session_token:
+        headers = {"Authorization": f"Token {session_token}"}
+        try:
+            response = requests.post(f"{BASE_URL}/api/logout", headers=headers)
+            if response.status_code == 200:
+                print_result("Logout with valid token", "PASS")
+            else:
+                print_result("Logout with valid token", "FAIL", f"HTTP {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print_result("Logout with valid token", "FAIL", str(e))
+    
+    # Test session info after logout (should fail)
+    if session_token:
+        headers = {"Authorization": f"Token {session_token}"}
+        try:
+            response = requests.get(f"{BASE_URL}/api/session", headers=headers)
+            if response.status_code == 401:
+                print_result("Session info after logout (should fail)", "PASS")
+            else:
+                print_result("Session info after logout (should fail)", "FAIL", f"Expected 401, got {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print_result("Session info after logout (should fail)", "FAIL", str(e))
+    
+    # Test CSRF protection (POST without CSRF token should fail)
+    if session_token and csrf_token:
+        # First login again to get a fresh session
+        login_response = test_endpoint(
+            "Login for CSRF test",
+            "/api/login",
+            200,
+            use_auth=False,
+            method="POST",
+            data={"username": "admin", "password": "password"}
+        )
+        if login_response:
+            session_token = login_response.get("sessionToken")
+            csrf_token = login_response.get("csrfToken", "")
+            
+            # Try POST without CSRF token
+            headers = {"Authorization": f"Token {session_token}"}
+            try:
+                response = requests.post(f"{BASE_URL}/api/system/reboot", headers=headers)
+                if response.status_code == 403:
+                    print_result("CSRF protection (POST without token)", "PASS")
+                else:
+                    print_result("CSRF protection (POST without token)", "FAIL", f"Expected 403, got {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print_result("CSRF protection (POST without token)", "FAIL", str(e))
     
     print()
     
