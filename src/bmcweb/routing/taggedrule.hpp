@@ -51,6 +51,10 @@ class TaggedRule : public BaseRule
         {
             handler_(req, asyncResp);
         }
+        else if (BaseRule::handler_)
+        {
+            BaseRule::handler_(req, asyncResp);
+        }
         else
         {
             asyncResp->res.result(http::status::internal_server_error);
@@ -98,6 +102,10 @@ class TaggedRule<> : public BaseRule
         if (handler_)
         {
             handler_(req, asyncResp);
+        }
+        else if (BaseRule::handler_)
+        {
+            BaseRule::handler_(req, asyncResp);
         }
         else
         {

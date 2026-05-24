@@ -3,6 +3,7 @@
 #include "../async_resp.hpp"
 #include "../http/request.hpp"
 #include "../http/types.hpp"
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +23,9 @@ namespace routing
 class BaseRule
 {
    public:
+    using HandlerFunction = std::function<void(const Request&,
+                                                const std::shared_ptr<AsyncResp>&)>;
+
     explicit BaseRule(const std::string& ruleIn) : rule(ruleIn) {}
 
     virtual ~BaseRule() = default;
@@ -62,6 +66,15 @@ class BaseRule
     }
 
     /**
+     * @brief Set the handler function
+     */
+    BaseRule& setHandler(HandlerFunction handler)
+    {
+        handler_ = std::move(handler);
+        return *this;
+    }
+
+    /**
      * @brief Check if this rule handles the given method
      */
     bool handlesMethod(Verb method) const
@@ -83,6 +96,7 @@ class BaseRule
    protected:
     std::string rule;
     std::vector<Verb> methods_;
+    HandlerFunction handler_;
 };
 
 } // namespace routing

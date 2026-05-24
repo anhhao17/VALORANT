@@ -393,7 +393,7 @@ const refreshStatistics = async () => {
   if (!statsStream.value) return
   
   try {
-    const response = await fetch(`/api/streams/${statsStream.value.id}/stats`, {
+    const response = await fetch(`/api/streams/${statsStream.value.id}/statistics`, {
       headers: {
         'Authorization': `Token ${authStore.sessionToken}`
       }
@@ -414,8 +414,8 @@ const resetStatistics = async () => {
   if (!statsStream.value) return
   
   try {
-    const response = await fetch(`/api/streams/${statsStream.value.id}/stats`, {
-      method: 'DELETE',
+    const response = await fetch(`/api/streams/${statsStream.value.id}/statistics/reset`, {
+      method: 'POST',
       headers: {
         'Authorization': `Token ${authStore.sessionToken}`
       }
