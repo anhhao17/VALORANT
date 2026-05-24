@@ -29,7 +29,7 @@ class AuthTester:
         url = f"{self.base_url}/api/login"
         
         try:
-            response = requests.post(url, json={"username": username, "password": password"})
+            response = requests.post(url, json={"username": username, "password": password})
             
             if response.status_code == 200:
                 data = response.json()
