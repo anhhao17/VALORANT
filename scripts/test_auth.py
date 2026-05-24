@@ -199,9 +199,17 @@ def run_auth_tests(base_url: str = "http://localhost:8080") -> Dict[str, bool]:
     results["Session invalid after logout"] = not success  # Should fail
     
     # Test 6: CSRF protection
-    auth.login("admin", "password")
-    success, _ = auth.make_authenticated_request("POST", "/api/system/reboot", include_csrf=False)
-    results["CSRF protection"] = not success  # Should fail without CSRF token
+    # For CSRF test, we need to use cookie-based authentication
+    # Create a session with cookies
+    session = requests.Session()
+    login_response = session.post(f"{base_url}/api/login", json={"username": "admin", "password": password})
+    
+    if login_response.status_code == 200:
+        # Try POST without CSRF token using the session (which has the cookie)
+        response = session.post(f"{base_url}/api/system/reboot")
+        results["CSRF protection"] = response.status_code == 403  # Should fail without CSRF token
+    else:
+        results["CSRF protection"] = False
     
     # Cleanup
     auth.logout()

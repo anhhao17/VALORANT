@@ -131,11 +131,13 @@ void AuthMiddleware::process(
 
     bool authenticated = false;
     std::string csrfToken;
+    bool usingCookieAuth = false;
 
     // Try cookie authentication first
     if (validateCookieAuth(req))
     {
         authenticated = true;
+        usingCookieAuth = true;
         // Get CSRF token from session for validation
         std::string cookieHeader = req.getHeaderValue(field::cookie);
         size_t pos = cookieHeader.find("SESSION=");
@@ -176,11 +178,12 @@ void AuthMiddleware::process(
     }
 
     // Validate CSRF token for state-changing requests
-    if (req.method() != boost::beast::http::verb::get &&
+    // CSRF protection is only required for cookie-based authentication
+    if (usingCookieAuth && req.method() != boost::beast::http::verb::get &&
         req.method() != boost::beast::http::verb::head &&
         req.method() != boost::beast::http::verb::options)
     {
-        if (!csrfToken.empty() && !validateCsrfToken(req, csrfToken))
+        if (csrfToken.empty() || !validateCsrfToken(req, csrfToken))
         {
             LOG_WARN("CSRF validation failed for route: {}", target);
             asyncResp->res.result(status::forbidden);
