@@ -48,6 +48,8 @@ target_link_libraries(jetson_tests PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     pthread
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
 
 # Register tests

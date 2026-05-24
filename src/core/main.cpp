@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 
 #include "bmcweb/app.hpp"
 #include "bmcweb/async_resp.hpp"
@@ -17,8 +18,53 @@
 
 using namespace embed::bmcweb::http;
 
-int main()
+int main(int argc, char* argv[])
 {
+    // Parse command-line arguments for SSL configuration
+    bool use_ssl = false;
+    std::string cert_file;
+    std::string key_file;
+    unsigned short port = 8080;
+    
+    for (int i = 1; i < argc; i++)
+    {
+        std::string arg = argv[i];
+        if (arg == "--ssl" || arg == "-s")
+        {
+            use_ssl = true;
+            port = 8443; // Default HTTPS port
+        }
+        else if (arg == "--cert" && i + 1 < argc)
+        {
+            cert_file = argv[++i];
+        }
+        else if (arg == "--key" && i + 1 < argc)
+        {
+            key_file = argv[++i];
+        }
+        else if (arg == "--port" && i + 1 < argc)
+        {
+            port = std::stoi(argv[++i]);
+        }
+        else if (arg == "--help" || arg == "-h")
+        {
+            std::cout << "Usage: " << argv[0] << " [options]\n"
+                      << "Options:\n"
+                      << "  --ssl, -s           Enable SSL/TLS (default port: 8443)\n"
+                      << "  --cert <file>       SSL certificate file path\n"
+                      << "  --key <file>        SSL private key file path\n"
+                      << "  --port <port>       Server port (default: 8080, 8443 with SSL)\n"
+                      << "  --help, -h          Show this help message\n";
+            return 0;
+        }
+    }
+    
+    if (use_ssl && (cert_file.empty() || key_file.empty()))
+    {
+        std::cerr << "Error: SSL enabled but cert or key file not provided\n";
+        std::cerr << "Use --cert and --key to specify certificate and key files\n";
+        return 1;
+    }
     // Initialize logging
     embed::bmcweb::initLogging(spdlog::level::info, "jetson.log");
 
@@ -66,12 +112,12 @@ int main()
     app.validate();
 
     LOG_INFO("Routes validated successfully");
-    LOG_INFO("Starting HTTP server on port 8080...");
+    LOG_INFO("Starting HTTP server on port {} (SSL: {})...", port, use_ssl);
 
     // Start HTTP server
     try
     {
-        embed::bmcweb::HttpServer server(app, "0.0.0.0", 8080);
+        embed::bmcweb::HttpServer server(app, "0.0.0.0", port, use_ssl, cert_file, key_file);
         LOG_INFO("Server started successfully");
         server.run();
     }
