@@ -62,6 +62,14 @@ void registerStreamingRoutes(App& app)
 
             try
             {
+                if (req.body().empty())
+                {
+                    asyncResp->res.result(status::bad_request);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Request body is required\"}");
+                    return;
+                }
+
                 auto body = nlohmann::json::parse(req.body());
                 std::string id = body.value("id", "");
                 std::string name = body.value("name", "");
@@ -106,6 +114,13 @@ void registerStreamingRoutes(App& app)
 
                 LOG_INFO("Stream added: {}", id);
             }
+            catch (const nlohmann::json::parse_error& e)
+            {
+                LOG_ERROR("JSON parse error: {}", e.what());
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid JSON format\"}");
+            }
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error adding stream: {}", e.what());
@@ -115,60 +130,12 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // DELETE /api/streams/{id} - Remove stream
-    JETSON_ROUTE(app, "/api/streams/*")
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_DEBUG("DELETE {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string id = target.substr(pos + 13); // "/api/streams/" length
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                if (!streamer.removeStream(id))
-                {
-                    asyncResp->res.result(status::not_found);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
-                    return;
-                }
-
-                nlohmann::json response;
-                response["message"] = "Stream removed successfully";
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-
-                LOG_INFO("Stream removed: {}", id);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error removing stream: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // PUT /api/streams/{id}/start - Start streaming
+    // POST /api/streams/{id}/start - Start streaming
     JETSON_ROUTE(app, "/api/streams/*/start")
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("PUT {} called", target);
+            LOG_DEBUG("POST /api/streams/*/start called");
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -220,12 +187,12 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // PUT /api/streams/{id}/stop - Stop streaming
+    // POST /api/streams/{id}/stop - Stop streaming
     JETSON_ROUTE(app, "/api/streams/*/stop")
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_DEBUG("PUT {} called", target);
+            LOG_DEBUG("POST /api/streams/*/stop called");
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -271,6 +238,54 @@ void registerStreamingRoutes(App& app)
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error stopping stream: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // DELETE /api/streams/{id} - Remove stream
+    JETSON_ROUTE(app, "/api/streams/*")
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_DEBUG("DELETE {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13); // "/api/streams/" length
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.removeStream(id))
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Stream removed successfully";
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Stream removed: {}", id);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error removing stream: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
