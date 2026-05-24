@@ -47,8 +47,30 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
         return;
     }
 
-    LOG_INFO(
-        "Received request: {} {}", std::string(req.method_string()), std::string(req.target()));
+    // Log complete request details for debugging
+    LOG_DEBUG("========== REQUEST START ==========");
+    LOG_DEBUG("Method: {}", std::string(req.method_string()));
+    LOG_DEBUG("Target: {}", std::string(req.target()));
+    LOG_DEBUG("HTTP Version: {}.{}", req.version() / 10, req.version() % 10);
+
+    // Log all headers
+    LOG_DEBUG("Headers:");
+    for (const auto& field : req)
+    {
+        LOG_DEBUG("  {}: {}", std::string(field.name_string()), std::string(field.value()));
+    }
+
+    // Log body if present
+    if (!req.body().empty())
+    {
+        LOG_DEBUG("Body: {}", req.body());
+    }
+    else
+    {
+        LOG_DEBUG("Body: (empty)");
+    }
+
+    LOG_DEBUG("========== REQUEST END ==========");
 
     // Check for WebSocket upgrade request
     if (websocket::is_upgrade(req))
@@ -117,6 +139,24 @@ void HttpSession::handleRequest()
 
     // Convert back to Beast response
     res = asyncResp->res.getBeastResponse();
+
+    // Log response details for debugging
+    LOG_DEBUG("========== RESPONSE START ==========");
+    LOG_DEBUG("Status: {} {}", res.result_int(), std::string(res.reason()));
+    LOG_DEBUG("Response Headers:");
+    for (const auto& field : res)
+    {
+        LOG_DEBUG("  {}: {}", std::string(field.name_string()), std::string(field.value()));
+    }
+    if (!res.body().empty())
+    {
+        LOG_DEBUG("Response Body: {}", res.body());
+    }
+    else
+    {
+        LOG_DEBUG("Response Body: (empty)");
+    }
+    LOG_DEBUG("========== RESPONSE END ==========");
 }
 
 void HttpSession::handleWebSocketUpgrade()

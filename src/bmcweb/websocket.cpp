@@ -92,12 +92,15 @@ void WebSocketSession::onRead(beast::error_code ec, std::size_t bytes_transferre
     // Process received message
     std::string message(static_cast<const char*>(buffer_.data().data()), buffer_.data().size());
     buffer_.consume(bytes_transferred);
-    
+
+    LOG_DEBUG("========== WEBSOCKET MESSAGE START ==========");
     LOG_DEBUG("WebSocket received message: {}", message);
-    
+    LOG_DEBUG("Message size: {} bytes", message.size());
+    LOG_DEBUG("========== WEBSOCKET MESSAGE END ==========");
+
     // Handle message (e.g., subscribe to data streams)
     handleMessage(message);
-    
+
     // Continue reading
     doRead();
 }
