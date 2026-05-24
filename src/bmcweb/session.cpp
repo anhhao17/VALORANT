@@ -49,7 +49,7 @@ std::shared_ptr<UserSession> SessionStore::generateUserSession(
 
     authTokens[sessionToken] = session;
 
-    LOG_DEBUG("Generated session for user: {} with token: {}", username, sessionToken);
+    LOG_INFO("User {} logged in (Active sessions: {})", username, authTokens.size());
 
     return session;
 }
@@ -94,7 +94,7 @@ void SessionStore::removeSession(std::shared_ptr<UserSession> session)
     if (session)
     {
         authTokens.erase(session->sessionToken);
-        LOG_DEBUG("Removed session for user: {}", session->username);
+        LOG_INFO("User {} logged out (Active sessions: {})", session->username, authTokens.size());
     }
 }
 

@@ -54,6 +54,11 @@ public:
         return static_cast<int>(std::chrono::seconds(timeoutInMinutes).count());
     }
 
+    int getActiveSessionCount() const
+    {
+        return static_cast<int>(authTokens.size());
+    }
+
 private:
     SessionStore() : timeoutInMinutes(60)
     {

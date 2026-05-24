@@ -121,9 +121,9 @@ void AuthMiddleware::process(
         return;
     }
 
-    // Skip authentication for login/logout/config endpoints
+    // Skip authentication for login/logout/config/sessions endpoints
     if (target == "/api/login" || target == "/api/logout" || target == "/api/session" ||
-        target.find("/api/config") == 0)
+        target == "/api/system/sessions" || target.find("/api/config") == 0)
     {
         LOG_DEBUG("Skipping authentication for public endpoint: {}", target);
         next();

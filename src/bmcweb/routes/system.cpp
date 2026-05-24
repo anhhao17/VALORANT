@@ -1,6 +1,7 @@
 #include "system.hpp"
 #include "../logging.hpp"
 #include "../hardware/sensor.hpp"
+#include "../session.hpp"
 #include <boost/beast/http/field.hpp>
 
 namespace embed::bmcweb::routes
@@ -11,6 +12,7 @@ void registerSystemRoutes(App& app)
     LOG_INFO("Registering system routes");
 
     auto& sensorReader = hardware::SensorReader::getInstance();
+    auto& sessionStore = SessionStore::getInstance();
 
     // System information endpoint
     JETSON_ROUTE(app, "/api/system/info")
@@ -31,7 +33,7 @@ void registerSystemRoutes(App& app)
 
     // System status endpoint
     JETSON_ROUTE(app, "/api/system/status")
-        .setHandler([&sensorReader](const Request&,
+        .setHandler([&sensorReader, &sessionStore](const Request&,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             LOG_DEBUG("System status endpoint called");
             nlohmann::json status;
@@ -39,6 +41,7 @@ void registerSystemRoutes(App& app)
             status["temperature"] = sensorReader.getCpuTemperature();
             status["power"] = "ON";
             status["cpu_usage"] = 25.3; // Could be enhanced with real CPU usage reading
+            status["active_sessions"] = sessionStore.getActiveSessionCount();
             
             asyncResp->res.result(status::ok);
             asyncResp->res.set(field::content_type, "application/json");
@@ -59,6 +62,23 @@ void registerSystemRoutes(App& app)
             asyncResp->res.set(field::content_type, "application/json");
             asyncResp->res.body(response.dump());
             LOG_INFO("System reboot initiated");
+        });
+
+    // Active sessions endpoint
+    JETSON_ROUTE(app, "/api/system/sessions")
+        .setHandler([](const Request&,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            LOG_DEBUG("Active sessions endpoint called");
+            auto& sessionStore = SessionStore::getInstance();
+            
+            nlohmann::json response;
+            response["active_sessions"] = sessionStore.getActiveSessionCount();
+            response["message"] = "Active authenticated sessions";
+            
+            asyncResp->res.result(status::ok);
+            asyncResp->res.set(field::content_type, "application/json");
+            asyncResp->res.body(response.dump());
+            LOG_DEBUG("Active sessions response sent");
         });
 }
 

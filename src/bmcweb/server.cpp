@@ -540,7 +540,6 @@ void HttpListener::onAccept(beast::error_code ec, tcp::socket socket)
         return;
     }
 
-    LOG_DEBUG("New connection accepted from {}", socket.remote_endpoint().address().to_string());
     // Create the session and run it
     std::make_shared<HttpSession>(std::move(socket), app_)->run();
 

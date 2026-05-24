@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <atomic>
 
 #include "app.hpp"
 #include "http/request.hpp"
@@ -48,6 +49,11 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
         : ssl_stream_(std::move(ssl_socket)), app_(app), use_ssl_(true)
     {
         LOG_DEBUG("New HTTPS session created");
+    }
+
+    ~HttpSession()
+    {
+        LOG_DEBUG("HTTP session destroyed");
     }
 
     void run();
