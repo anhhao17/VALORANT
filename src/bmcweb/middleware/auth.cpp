@@ -1,4 +1,5 @@
 #include "auth.hpp"
+
 #include "../logging.hpp"
 
 namespace jetson::bmcweb::middleware
@@ -15,14 +16,23 @@ void AuthMiddleware::addUser(const std::string& username, const std::string& pas
     LOG_DEBUG("User added: {}", username);
 }
 
-void AuthMiddleware::process(const Request& req, const std::shared_ptr<AsyncResp>& asyncResp,
-                             std::function<void()> next)
+void AuthMiddleware::process(
+    const Request& req, const std::shared_ptr<AsyncResp>& asyncResp, std::function<void()> next)
 {
     LOG_DEBUG("Processing authentication middleware");
-    
+
+    // Skip authentication for static file routes (non-API routes)
+    std::string target = std::string(req.target());
+    if (target.find("/api/") != 0)
+    {
+        LOG_DEBUG("Skipping authentication for non-API route: {}", target);
+        next();
+        return;
+    }
+
     // Check for Authorization header
     std::string authHeader = req.getHeaderValue(field::authorization);
-    
+
     if (authHeader.empty())
     {
         LOG_WARN("Authentication failed: No auth header provided");
@@ -44,10 +54,10 @@ void AuthMiddleware::process(const Request& req, const std::shared_ptr<AsyncResp
     // For simplicity, we'll just check if the header exists
     // In production, you'd decode the base64 and validate credentials
     // This is a minimal implementation for demonstration
-    
+
     LOG_DEBUG("Authentication successful");
     // Continue to next middleware if auth is present
     next();
 }
 
-} // namespace jetson::bmcweb::middleware
+}  // namespace jetson::bmcweb::middleware

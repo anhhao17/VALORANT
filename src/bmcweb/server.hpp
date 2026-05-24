@@ -1,14 +1,18 @@
 #pragma once
 
+#include <boost/asio.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <thread>
+
 #include "app.hpp"
 #include "http/request.hpp"
 #include "http/response.hpp"
 #include "logging.hpp"
-#include <boost/asio.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <memory>
-#include <thread>
 
 namespace jetson::bmcweb
 {
@@ -20,13 +24,16 @@ using tcp = asio::ip::tcp;
 
 /**
  * @brief HTTP session handler for a single connection
- * 
+ *
  * Handles reading requests, routing them through the App, and sending responses.
  */
 class HttpSession : public std::enable_shared_from_this<HttpSession>
 {
    public:
-    explicit HttpSession(tcp::socket socket, App& app);
+    explicit HttpSession(tcp::socket socket, App& app) : stream(std::move(socket)), app_(app)
+    {
+        LOG_DEBUG("New HTTP session created");
+    }
 
     void run();
 
@@ -44,7 +51,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession>
 
 /**
  * @brief HTTP listener that accepts connections
- * 
+ *
  * Listens on a TCP port and creates HttpSession instances for each connection.
  */
 class HttpListener : public std::enable_shared_from_this<HttpListener>
@@ -64,14 +71,17 @@ class HttpListener : public std::enable_shared_from_this<HttpListener>
 
 /**
  * @brief HTTP server
- * 
+ *
  * Manages the IO context and starts the listener.
  */
 class HttpServer
 {
    public:
-    HttpServer(App& app, const std::string& address = "0.0.0.0",
-               unsigned short port = 8080);
+    HttpServer(App& app, const std::string& address = "0.0.0.0", unsigned short port = 8080)
+        : app_(app), address_(address), port_(port)
+    {
+        LOG_INFO("HTTP server configured for {}:{}", address, port);
+    }
 
     void run();
 
@@ -81,4 +91,4 @@ class HttpServer
     unsigned short port_;
 };
 
-} // namespace jetson::bmcweb
+}  // namespace jetson::bmcweb

@@ -1,23 +1,18 @@
 #include "server.hpp"
+
 #include "logging.hpp"
 
 namespace jetson::bmcweb
 {
 
 // HttpSession implementation
-HttpSession::HttpSession(tcp::socket socket, App& app)
-    : stream(std::move(socket)), app_(app)
-{
-    LOG_DEBUG("New HTTP session created");
-}
 
 void HttpSession::run()
 {
     LOG_DEBUG("Starting HTTP session");
     // Read the request
     http::async_read(
-        stream, buffer, req,
-        beast::bind_front_handler(&HttpSession::onRead, shared_from_this()));
+        stream, buffer, req, beast::bind_front_handler(&HttpSession::onRead, shared_from_this()));
 }
 
 void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred */)
@@ -34,16 +29,16 @@ void HttpSession::onRead(beast::error_code ec, std::size_t /* bytesTransferred *
         return;
     }
 
-    LOG_DEBUG("Received request: {} {}", std::string(req.method_string()), std::string(req.target()));
-    
+    LOG_DEBUG(
+        "Received request: {} {}", std::string(req.method_string()), std::string(req.target()));
+
     // Process the request
     handleRequest();
 
     // Send the response
     http::async_write(
         stream, res,
-        beast::bind_front_handler(&HttpSession::onWrite, shared_from_this(),
-                                  res.need_eof()));
+        beast::bind_front_handler(&HttpSession::onWrite, shared_from_this(), res.need_eof()));
 }
 
 void HttpSession::handleRequest()
@@ -84,8 +79,7 @@ void HttpSession::onWrite(bool close, beast::error_code ec, std::size_t /* bytes
     // Read another request
     res = {};
     http::async_read(
-        stream, buffer, req,
-        beast::bind_front_handler(&HttpSession::onRead, shared_from_this()));
+        stream, buffer, req, beast::bind_front_handler(&HttpSession::onRead, shared_from_this()));
 }
 
 // HttpListener implementation
@@ -145,25 +139,23 @@ void HttpListener::onAccept(beast::error_code ec, tcp::socket socket)
 {
     if (ec)
     {
-        LOG_ERROR("Accept error: {}", ec.message());
+        // Don't continue accepting on fatal errors
+        if (ec != asio::error::operation_aborted)
+        {
+            LOG_ERROR("Accept error: {}", ec.message());
+        }
+        return;
     }
-    else
-    {
-        LOG_DEBUG("New connection accepted from {}", socket.remote_endpoint().address().to_string());
-        // Create the session and run it
-        std::make_shared<HttpSession>(std::move(socket), app_)->run();
-    }
+
+    LOG_DEBUG("New connection accepted from {}", socket.remote_endpoint().address().to_string());
+    // Create the session and run it
+    std::make_shared<HttpSession>(std::move(socket), app_)->run();
 
     // Accept another connection
     doAccept();
 }
 
 // HttpServer implementation
-HttpServer::HttpServer(App& app, const std::string& address, unsigned short port)
-    : app_(app), address_(address), port_(port)
-{
-    LOG_INFO("HTTP server configured for {}:{}", address, port);
-}
 
 void HttpServer::run()
 {
@@ -180,11 +172,10 @@ void HttpServer::run()
 
     // Capture SIGINT and SIGTERM to perform a clean shutdown
     asio::signal_set signals(ioc, SIGINT, SIGTERM);
-    signals.async_wait(
-        [&](beast::error_code const&, int) { 
-            LOG_INFO("Shutdown signal received");
-            ioc.stop(); 
-        });
+    signals.async_wait([&](beast::error_code const&, int) {
+        LOG_INFO("Shutdown signal received");
+        ioc.stop();
+    });
 
     // Run the I/O service on the requested number of threads
     std::vector<std::thread> v;
@@ -200,8 +191,8 @@ void HttpServer::run()
     {
         t.join();
     }
-    
+
     LOG_INFO("HTTP server stopped");
 }
 
-} // namespace jetson::bmcweb
+}  // namespace jetson::bmcweb
