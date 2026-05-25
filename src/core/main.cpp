@@ -16,7 +16,7 @@
 #include "bmcweb/routes/websocket.hpp"
 #include "bmcweb/routes/config.hpp"
 #include "bmcweb/routes/users.hpp"
-#include "bmcweb/routes/streaming.hpp"
+#include "bmcweb/routes/streaming_routes.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
 #include "bmcweb/hardware/sensor.hpp"

@@ -46,12 +46,15 @@ add_executable(jetson
     src/bmcweb/routes/websocket.cpp
     src/bmcweb/routes/config.cpp
     src/bmcweb/routes/users.cpp
-    src/bmcweb/routes/streaming.cpp
+    src/bmcweb/routes/streaming_routes.cpp
     src/bmcweb/hardware/sensor.cpp
     src/bmcweb/config/config.cpp
     src/bmcweb/user/user.cpp
     src/bmcweb/streaming/streamer.cpp
     src/bmcweb/streaming/recording_manager.cpp
+    src/bmcweb/streaming/protocol_manager.cpp
+    src/bmcweb/streaming/session_manager.cpp
+    src/bmcweb/streaming/camera_detector.cpp
     src/bmcweb/authorization/permission.cpp
 )
 

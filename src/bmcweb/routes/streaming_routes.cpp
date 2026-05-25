@@ -1,4 +1,4 @@
-#include "streaming.hpp"
+#include "streaming_routes.hpp"
 #include "../streaming/streamer.hpp"
 #include "../logging.hpp"
 #include <boost/beast/http/field.hpp>
@@ -108,57 +108,39 @@ void registerStreamingRoutes(App& app)
 
             try
             {
-                if (req.body().empty())
-                {
-                    asyncResp->res.result(status::bad_request);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Request body is required\"}");
-                    return;
-                }
-
                 auto body = nlohmann::json::parse(req.body());
-                std::string id = body.value("id", "");
-                std::string name = body.value("name", "");
-                int type = body.value("type", 0);
-                std::string sourcePath = body.value("sourcePath", "");
-                bool loop = body.value("loop", true);
-                int quality = body.value("quality", 80);
-
-                if (id.empty() || sourcePath.empty())
-                {
-                    asyncResp->res.result(status::bad_request);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"ID and sourcePath are required\"}");
-                    return;
-                }
-
+                
                 streaming::StreamConfig config;
-                config.id = id;
-                config.name = name;
-                config.type = static_cast<streaming::StreamSourceType>(type);
-                config.sourcePath = sourcePath;
-                config.enabled = true;
-                config.loop = loop;
-                config.quality = quality;
+                config.id = body.value("id", "");
+                config.name = body.value("name", "");
+                config.type = static_cast<streaming::StreamSourceType>(body.value("type", 0));
+                config.protocol = static_cast<streaming::StreamProtocol>(body.value("protocol", 0));
+                config.sourcePath = body.value("sourcePath", "");
+                config.enabled = body.value("enabled", true);
+                config.loop = body.value("loop", false);
+                config.quality = body.value("quality", 80);
+                config.bufferSize = body.value("bufferSize", 1048576);
+                config.segmentDuration = body.value("segmentDuration", 10);
+                config.port = body.value("port", 8554);
 
                 auto& streamer = streaming::VideoStreamer::getInstance();
                 if (!streamer.addStream(config))
                 {
-                    asyncResp->res.result(status::conflict);
+                    asyncResp->res.result(status::bad_request);
                     asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Stream already exists or invalid\"}");
+                    asyncResp->res.body("{\"error\":\"Failed to add stream\"}");
                     return;
                 }
 
                 nlohmann::json response;
                 response["message"] = "Stream added successfully";
-                response["id"] = id;
+                response["id"] = config.id;
 
-                asyncResp->res.result(status::created);
+                asyncResp->res.result(status::ok);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body(response.dump());
 
-                LOG_INFO("Stream added: {}", id);
+                LOG_INFO("Stream added: {}", config.id);
             }
             catch (const nlohmann::json::parse_error& e)
             {
@@ -170,6 +152,134 @@ void registerStreamingRoutes(App& app)
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error adding stream: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // PUT /api/streams/{id} - Update stream
+    JETSON_ROUTE(app, "/api/streams/*")
+        .setMethods({boost::beast::http::verb::put})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("PUT {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13); // "/api/streams/" length
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto existingConfig = streamer.getStream(id);
+                
+                if (existingConfig.id.empty())
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
+                    return;
+                }
+
+                auto body = nlohmann::json::parse(req.body());
+                
+                streaming::StreamConfig updatedConfig = existingConfig;
+                if (body.contains("name")) updatedConfig.name = body["name"];
+                if (body.contains("sourcePath")) updatedConfig.sourcePath = body["sourcePath"];
+                if (body.contains("enabled")) updatedConfig.enabled = body["enabled"];
+                if (body.contains("loop")) updatedConfig.loop = body["loop"];
+                if (body.contains("quality")) updatedConfig.quality = body["quality"];
+                if (body.contains("protocol")) updatedConfig.protocol = static_cast<streaming::StreamProtocol>(body["protocol"]);
+
+                // Remove and re-add the stream (simplest approach for now)
+                streamer.removeStream(id);
+                if (!streamer.addStream(updatedConfig))
+                {
+                    asyncResp->res.result(status::internal_server_error);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to update stream\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Stream updated successfully";
+                response["id"] = id;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Stream updated: {}", id);
+            }
+            catch (const nlohmann::json::parse_error& e)
+            {
+                LOG_ERROR("JSON parse error: {}", e.what());
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid JSON format\"}");
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error updating stream: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // DELETE /api/streams/{id} - Delete stream
+    JETSON_ROUTE(app, "/api/streams/*")
+        .setMethods({boost::beast::http::verb::delete_})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("DELETE {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13); // "/api/streams/" length
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.removeStream(id))
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Stream removed successfully";
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Stream removed: {}", id);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error removing stream: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
@@ -292,13 +402,13 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // DELETE /api/streams/{id} - Remove stream
-    JETSON_ROUTE(app, "/api/streams/*")
-        .setMethods({boost::beast::http::verb::delete_})
+    // GET /api/streams/{id}/status - Get stream protocol status
+    JETSON_ROUTE(app, "/api/streams/*/status")
+        .setMethods({boost::beast::http::verb::get})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_INFO("DELETE {} called", target);
+            LOG_INFO("GET {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -310,44 +420,61 @@ void registerStreamingRoutes(App& app)
                 return;
             }
 
-            std::string id = target.substr(pos + 13); // "/api/streams/" length
+            size_t endPos = target.find("/status", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
 
             try
             {
                 auto& streamer = streaming::VideoStreamer::getInstance();
-                if (!streamer.removeStream(id))
-                {
-                    asyncResp->res.result(status::not_found);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
-                    return;
-                }
-
+                
                 nlohmann::json response;
-                response["message"] = "Stream removed successfully";
+                response["id"] = id;
+                response["active"] = streamer.isStreaming(id);
+                response["protocol"] = static_cast<int>(streamer.getStreamProtocol(id));
+                
+                // Convert protocol enum to string
+                streaming::StreamProtocol currentProtocol = streamer.getStreamProtocol(id);
+                std::string protocolName;
+                switch(currentProtocol) {
+                    case streaming::StreamProtocol::MJPEG: protocolName = "mjpeg"; break;
+                    case streaming::StreamProtocol::UDP_RTP: protocolName = "udp"; break;
+                    case streaming::StreamProtocol::RTSP: protocolName = "rtsp"; break;
+                    case streaming::StreamProtocol::WEBRTC: protocolName = "webrtc"; break;
+                    case streaming::StreamProtocol::HLS: protocolName = "hls"; break;
+                    default: protocolName = "unknown"; break;
+                }
+                response["protocolName"] = protocolName;
+                response["locked"] = streamer.isProtocolLocked(id);
+                response["clients"] = streamer.getClientCount(id);
 
                 asyncResp->res.result(status::ok);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body(response.dump());
-
-                LOG_INFO("Stream removed: {}", id);
             }
             catch (const std::exception& e)
             {
-                LOG_ERROR("Error removing stream: {}", e.what());
+                LOG_ERROR("Error getting stream status: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
             }
         });
 
-    // PUT /api/streams/{id} - Update stream
-    JETSON_ROUTE(app, "/api/streams/*")
-        .setMethods({boost::beast::http::verb::put})
+    // GET /api/streams/{id}/statistics - Get stream statistics
+    JETSON_ROUTE(app, "/api/streams/*/statistics")
+        .setMethods({boost::beast::http::verb::get})
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
             std::string target = std::string(req.target());
-            LOG_INFO("PUT {} called", target);
+            LOG_INFO("GET {} called", target);
 
             // Extract stream ID from path
             size_t pos = target.find("/api/streams/");
@@ -359,72 +486,411 @@ void registerStreamingRoutes(App& app)
                 return;
             }
 
-            std::string id = target.substr(pos + 13); // "/api/streams/" length
+            size_t endPos = target.find("/statistics", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
 
             try
             {
-                if (req.body().empty())
-                {
-                    asyncResp->res.result(status::bad_request);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Request body is required\"}");
-                    return;
-                }
-
-                auto body = nlohmann::json::parse(req.body());
-                std::string name = body.value("name", "");
-                std::string sourcePath = body.value("sourcePath", "");
-                int quality = body.value("quality", 80);
-                bool loop = body.value("loop", true);
-
                 auto& streamer = streaming::VideoStreamer::getInstance();
-                auto config = streamer.getStream(id);
-                
-                if (config.id.empty())
-                {
-                    asyncResp->res.result(status::not_found);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Stream not found\"}");
-                    return;
-                }
-
-                // Update the stream configuration
-                streaming::StreamConfig updatedConfig = config;
-                if (!name.empty()) updatedConfig.name = name;
-                if (!sourcePath.empty()) updatedConfig.sourcePath = sourcePath;
-                updatedConfig.quality = quality;
-                updatedConfig.loop = loop;
-
-                // Remove and re-add the stream (simplest approach for now)
-                streamer.removeStream(id);
-                if (!streamer.addStream(updatedConfig))
-                {
-                    asyncResp->res.result(status::internal_server_error);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Failed to update stream\"}");
-                    return;
-                }
+                auto stats = streamer.getStreamStatistics(id);
 
                 nlohmann::json response;
-                response["message"] = "Stream updated successfully";
-                response["id"] = id;
+                response["streamId"] = id;
+                response["bytesServed"] = stats.bytesServed;
+                response["framesServed"] = stats.framesServed;
+                response["clientConnections"] = stats.clientConnections;
+                response["startTime"] = stats.startTime;
+                response["lastFrameTime"] = stats.lastFrameTime;
+                response["averageBitrate"] = stats.averageBitrate;
+                response["currentViewers"] = stats.currentViewers;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // POST /api/streams/{id}/statistics/reset - Reset stream statistics
+    JETSON_ROUTE(app, "/api/streams/*/statistics/reset")
+        .setMethods({boost::beast::http::verb::post})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("POST {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/statistics/reset", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                streamer.resetStreamStatistics(id);
+
+                nlohmann::json response;
+                response["streamId"] = id;
 
                 asyncResp->res.result(status::ok);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body(response.dump());
 
-                LOG_INFO("Stream updated: {}", id);
-            }
-            catch (const nlohmann::json::parse_error& e)
-            {
-                LOG_ERROR("JSON parse error: {}", e.what());
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid JSON format\"}");
+                LOG_INFO("Statistics reset for stream: {}", id);
             }
             catch (const std::exception& e)
             {
-                LOG_ERROR("Error updating stream: {}", e.what());
+                LOG_ERROR("Error resetting stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/streams/statistics - Get all stream statistics
+    JETSON_ROUTE(app, "/api/streams/statistics")
+        .setMethods({boost::beast::http::verb::get})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            LOG_INFO("GET /api/streams/statistics called");
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto allStats = streamer.getAllStreamStatistics();
+
+                nlohmann::json response = nlohmann::json::array();
+                for (const auto& [id, stats] : allStats)
+                {
+                    nlohmann::json statsJson;
+                    statsJson["streamId"] = id;
+                    statsJson["bytesServed"] = stats.bytesServed;
+                    statsJson["framesServed"] = stats.framesServed;
+                    statsJson["clientConnections"] = stats.clientConnections;
+                    statsJson["startTime"] = stats.startTime;
+                    statsJson["lastFrameTime"] = stats.lastFrameTime;
+                    statsJson["averageBitrate"] = stats.averageBitrate;
+                    statsJson["currentViewers"] = stats.currentViewers;
+                    response.push_back(statsJson);
+                }
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting all stream statistics: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/streams/{id}/thumbnail - Get stream thumbnail
+    JETSON_ROUTE(app, "/api/streams/*/thumbnail")
+        .setMethods({boost::beast::http::verb::get})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("GET {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/thumbnail", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto thumbnail = streamer.generateThumbnail(id);
+
+                if (thumbnail.empty())
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Thumbnail not found\"}");
+                    return;
+                }
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "image/jpeg");
+                asyncResp->res.body(std::string(thumbnail.begin(), thumbnail.end()));
+
+                LOG_DEBUG("Thumbnail served for stream: {}", id);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error getting thumbnail: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // POST /api/streams/{id}/record - Start recording a stream
+    JETSON_ROUTE(app, "/api/streams/*/record")
+        .setMethods({boost::beast::http::verb::post})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("POST {} called", target);
+
+            // Extract stream ID from path
+            size_t pos = target.find("/api/streams/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/record", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string id = target.substr(pos + 13, endPos - (pos + 13));
+
+            try
+            {
+                std::string format = "mp4";
+                try
+                {
+                    auto body = nlohmann::json::parse(req.body());
+                    format = body.value("format", "mp4");
+                }
+                catch (...)
+                {
+                    // Use default format if body parsing fails
+                }
+
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                std::string recordingId = streamer.startRecording(id, format);
+
+                if (recordingId.empty())
+                {
+                    asyncResp->res.result(status::bad_request);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Failed to start recording\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording started successfully";
+                response["recordingId"] = recordingId;
+                response["streamId"] = id;
+                response["format"] = format;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording started for stream: {}, recording: {}", id, recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error starting recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // POST /api/recordings/{id}/stop - Stop recording
+    JETSON_ROUTE(app, "/api/recordings/*/stop")
+        .setMethods({boost::beast::http::verb::post})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("POST {} called", target);
+
+            // Extract recording ID from path
+            size_t pos = target.find("/api/recordings/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            size_t endPos = target.find("/stop", pos);
+            if (endPos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string recordingId = target.substr(pos + 16, endPos - (pos + 16));
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.stopRecording(recordingId))
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Recording not found\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording stopped successfully";
+                response["recordingId"] = recordingId;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording stopped: {}", recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error stopping recording: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // GET /api/recordings - List all recordings
+    JETSON_ROUTE(app, "/api/recordings")
+        .setMethods({boost::beast::http::verb::get})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            LOG_INFO("GET /api/recordings called");
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                auto recordings = streamer.getAllRecordings();
+
+                nlohmann::json response = nlohmann::json::array();
+                for (const auto& recording : recordings)
+                {
+                    nlohmann::json recordingJson;
+                    recordingJson["recordingId"] = recording.recordingId;
+                    recordingJson["streamId"] = recording.streamId;
+                    recordingJson["filePath"] = recording.filePath;
+                    recordingJson["state"] = static_cast<int>(recording.state);
+                    recordingJson["startTime"] = recording.startTime;
+                    recordingJson["duration"] = recording.duration;
+                    recordingJson["fileSize"] = recording.fileSize;
+                    recordingJson["format"] = recording.format;
+                    response.push_back(recordingJson);
+                }
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error listing recordings: {}", e.what());
+                asyncResp->res.result(status::internal_server_error);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Internal server error\"}");
+            }
+        });
+
+    // DELETE /api/recordings/{id} - Delete recording
+    JETSON_ROUTE(app, "/api/recordings/*")
+        .setMethods({boost::beast::http::verb::delete_})
+        .setHandler([](const Request& req,
+                      const std::shared_ptr<AsyncResp>& asyncResp) {
+            std::string target = std::string(req.target());
+            LOG_INFO("DELETE {} called", target);
+
+            // Extract recording ID from path
+            size_t pos = target.find("/api/recordings/");
+            if (pos == std::string::npos)
+            {
+                asyncResp->res.result(status::bad_request);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Invalid path\"}");
+                return;
+            }
+
+            std::string recordingId = target.substr(pos + 16);
+
+            try
+            {
+                auto& streamer = streaming::VideoStreamer::getInstance();
+                if (!streamer.deleteRecording(recordingId))
+                {
+                    asyncResp->res.result(status::not_found);
+                    asyncResp->res.set(field::content_type, "application/json");
+                    asyncResp->res.body("{\"error\":\"Recording not found\"}");
+                    return;
+                }
+
+                nlohmann::json response;
+                response["message"] = "Recording deleted successfully";
+                response["recordingId"] = recordingId;
+
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body(response.dump());
+
+                LOG_INFO("Recording deleted: {}", recordingId);
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("Error deleting recording: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");
@@ -597,526 +1063,6 @@ void registerStreamingRoutes(App& app)
             catch (const std::exception& e)
             {
                 LOG_ERROR("Error streaming video: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // GET /api/streams/{id}/statistics - Get stream statistics
-    JETSON_ROUTE(app, "/api/streams/*/statistics")
-        .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("GET {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/statistics", pos);
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string id = target.substr(pos + 13, endPos - (pos + 13));
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                auto stats = streamer.getStreamStatistics(id);
-
-                nlohmann::json response;
-                response["streamId"] = id;
-                response["bytesServed"] = stats.bytesServed;
-                response["framesServed"] = stats.framesServed;
-                response["clientConnections"] = stats.clientConnections;
-                response["startTime"] = stats.startTime;
-                response["lastFrameTime"] = stats.lastFrameTime;
-                response["averageBitrate"] = stats.averageBitrate;
-                response["currentViewers"] = stats.currentViewers;
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error getting stream statistics: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // GET /api/streams/{id}/status - Get stream protocol status
-    JETSON_ROUTE(app, "/api/streams/*/status")
-        .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("GET {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/status", pos);
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string id = target.substr(pos + 13, endPos - (pos + 13));
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                
-                nlohmann::json response;
-                response["id"] = id;
-                response["active"] = streamer.isStreaming(id);
-                response["protocol"] = static_cast<int>(streamer.getStreamProtocol(id));
-                
-                // Convert protocol enum to string
-                streaming::StreamProtocol currentProtocol = streamer.getStreamProtocol(id);
-                std::string protocolName;
-                switch(currentProtocol) {
-                    case streaming::StreamProtocol::MJPEG: protocolName = "mjpeg"; break;
-                    case streaming::StreamProtocol::UDP_RTP: protocolName = "udp"; break;
-                    case streaming::StreamProtocol::RTSP: protocolName = "rtsp"; break;
-                    case streaming::StreamProtocol::WEBRTC: protocolName = "webrtc"; break;
-                    case streaming::StreamProtocol::HLS: protocolName = "hls"; break;
-                    default: protocolName = "unknown"; break;
-                }
-                response["protocolName"] = protocolName;
-                response["locked"] = streamer.isProtocolLocked(id);
-                response["clients"] = streamer.getClientCount(id);
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error getting stream status: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // POST /api/streams/{id}/statistics/reset - Reset stream statistics
-    JETSON_ROUTE(app, "/api/streams/*/statistics/reset")
-        .setMethods({boost::beast::http::verb::post})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("POST {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/statistics/reset", pos);
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string id = target.substr(pos + 13, endPos - (pos + 13));
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                streamer.resetStreamStatistics(id);
-
-                nlohmann::json response;
-                response["message"] = "Statistics reset successfully";
-                response["streamId"] = id;
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-
-                LOG_INFO("Statistics reset for stream: {}", id);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error resetting stream statistics: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // GET /api/streams/statistics - Get all stream statistics
-    JETSON_ROUTE(app, "/api/streams/statistics")
-        .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_INFO("GET /api/streams/statistics called");
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                auto allStats = streamer.getAllStreamStatistics();
-
-                nlohmann::json response = nlohmann::json::array();
-                for (const auto& [id, stats] : allStats)
-                {
-                    nlohmann::json statsJson;
-                    statsJson["streamId"] = id;
-                    statsJson["bytesServed"] = stats.bytesServed;
-                    statsJson["framesServed"] = stats.framesServed;
-                    statsJson["clientConnections"] = stats.clientConnections;
-                    statsJson["startTime"] = stats.startTime;
-                    statsJson["lastFrameTime"] = stats.lastFrameTime;
-                    statsJson["averageBitrate"] = stats.averageBitrate;
-                    statsJson["currentViewers"] = stats.currentViewers;
-                    response.push_back(statsJson);
-                }
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error getting all stream statistics: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // POST /api/streams/{id}/record - Start recording a stream
-    JETSON_ROUTE(app, "/api/streams/*/record")
-        .setMethods({boost::beast::http::verb::post})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("POST {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/record", pos);
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string id = target.substr(pos + 13, endPos - (pos + 13));
-
-            try
-            {
-                // Parse optional format from body
-                std::string format = "mp4";
-                try
-                {
-                    auto body = nlohmann::json::parse(req.body());
-                    format = body.value("format", "mp4");
-                }
-                catch (...)
-                {
-                    // Use default format if body parsing fails
-                }
-
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                std::string recordingId = streamer.startRecording(id, format);
-
-                if (recordingId.empty())
-                {
-                    asyncResp->res.result(status::bad_request);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Failed to start recording\"}");
-                    return;
-                }
-
-                nlohmann::json response;
-                response["message"] = "Recording started successfully";
-                response["recordingId"] = recordingId;
-                response["streamId"] = id;
-                response["format"] = format;
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-
-                LOG_INFO("Recording started for stream: {}, recording: {}", id, recordingId);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error starting recording: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // POST /api/recordings/{id}/stop - Stop recording
-    JETSON_ROUTE(app, "/api/recordings/*/stop")
-        .setMethods({boost::beast::http::verb::post})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("POST {} called", target);
-
-            // Extract recording ID from path
-            size_t pos = target.find("/api/recordings/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/stop", pos);
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string recordingId = target.substr(pos + 16, endPos - (pos + 16));
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                if (!streamer.stopRecording(recordingId))
-                {
-                    asyncResp->res.result(status::bad_request);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Failed to stop recording\"}");
-                    return;
-                }
-
-                nlohmann::json response;
-                response["message"] = "Recording stopped successfully";
-                response["recordingId"] = recordingId;
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-
-                LOG_INFO("Recording stopped: {}", recordingId);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error stopping recording: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // GET /api/recordings - Get all recordings
-    JETSON_ROUTE(app, "/api/recordings")
-        .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_INFO("GET /api/recordings called");
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                auto recordings = streamer.getAllRecordings();
-
-                nlohmann::json response = nlohmann::json::array();
-                for (const auto& recording : recordings)
-                {
-                    nlohmann::json recordingJson;
-                    recordingJson["recordingId"] = recording.recordingId;
-                    recordingJson["streamId"] = recording.streamId;
-                    recordingJson["filePath"] = recording.filePath;
-                    recordingJson["state"] = static_cast<int>(recording.state);
-                    recordingJson["startTime"] = recording.startTime;
-                    recordingJson["duration"] = recording.duration;
-                    recordingJson["fileSize"] = recording.fileSize;
-                    recordingJson["format"] = recording.format;
-                    response.push_back(recordingJson);
-                }
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error getting recordings: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // DELETE /api/recordings/{id} - Delete recording
-    JETSON_ROUTE(app, "/api/recordings/*")
-        .setMethods({boost::beast::http::verb::delete_})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("DELETE {} called", target);
-
-            // Extract recording ID from path
-            size_t pos = target.find("/api/recordings/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string recordingId = target.substr(pos + 16);
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                if (!streamer.deleteRecording(recordingId))
-                {
-                    asyncResp->res.result(status::not_found);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Recording not found\"}");
-                    return;
-                }
-
-                nlohmann::json response;
-                response["message"] = "Recording deleted successfully";
-                response["recordingId"] = recordingId;
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body(response.dump());
-
-                LOG_INFO("Recording deleted: {}", recordingId);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error deleting recording: {}", e.what());
-                asyncResp->res.result(status::internal_server_error);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Internal server error\"}");
-            }
-        });
-
-    // GET /api/streams/{id}/thumbnail - Get or generate stream thumbnail
-    JETSON_ROUTE(app, "/api/streams/*/thumbnail")
-        .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
-                      const std::shared_ptr<AsyncResp>& asyncResp) {
-            std::string target = std::string(req.target());
-            LOG_INFO("GET {} called", target);
-
-            // Extract stream ID from path
-            size_t pos = target.find("/api/streams/");
-            if (pos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            size_t endPos = target.find("/thumbnail");
-            if (endPos == std::string::npos)
-            {
-                asyncResp->res.result(status::bad_request);
-                asyncResp->res.set(field::content_type, "application/json");
-                asyncResp->res.body("{\"error\":\"Invalid path\"}");
-                return;
-            }
-
-            std::string streamId = target.substr(pos + 13, endPos - pos - 13);
-
-            try
-            {
-                auto& streamer = streaming::VideoStreamer::getInstance();
-                
-                // Check if thumbnail exists
-                std::string thumbnailPath = streamer.getThumbnailPath(streamId);
-                if (thumbnailPath.empty())
-                {
-                    // Generate thumbnail with default size
-                    auto thumbnail = streamer.generateThumbnail(streamId);
-                    if (thumbnail.empty())
-                    {
-                        asyncResp->res.result(status::not_found);
-                        asyncResp->res.set(field::content_type, "application/json");
-                        asyncResp->res.body("{\"error\":\"Stream not found or no video data\"}");
-                        return;
-                    }
-                    thumbnailPath = streamer.getThumbnailPath(streamId);
-                }
-
-                // Read thumbnail file
-                std::ifstream file(thumbnailPath, std::ios::binary);
-                if (!file.is_open())
-                {
-                    asyncResp->res.result(status::internal_server_error);
-                    asyncResp->res.set(field::content_type, "application/json");
-                    asyncResp->res.body("{\"error\":\"Failed to read thumbnail\"}");
-                    return;
-                }
-
-                std::vector<uint8_t> thumbnailData((std::istreambuf_iterator<char>(file)),
-                                                   std::istreambuf_iterator<char>());
-                file.close();
-
-                asyncResp->res.result(status::ok);
-                asyncResp->res.set(field::content_type, "image/jpeg");
-                std::string bodyStr(reinterpret_cast<const char*>(thumbnailData.data()),
-                                   thumbnailData.size());
-                asyncResp->res.body(bodyStr);
-
-                LOG_INFO("Thumbnail served for stream: {}", streamId);
-            }
-            catch (const std::exception& e)
-            {
-                LOG_ERROR("Error getting thumbnail: {}", e.what());
                 asyncResp->res.result(status::internal_server_error);
                 asyncResp->res.set(field::content_type, "application/json");
                 asyncResp->res.body("{\"error\":\"Internal server error\"}");

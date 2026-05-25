@@ -5,7 +5,6 @@
 #include <chrono>
 #include <thread>
 #include <map>
-#include <algorithm>
 
 namespace embed::bmcweb::streaming
 {
@@ -72,10 +71,8 @@ bool VideoStreamer::addStream(const StreamConfig& config)
     streams_[fullConfig.id] = fullConfig;
     streaming_[fullConfig.id] = false;
     
-    // Initialize protocol settings
-    activeProtocols_[fullConfig.id] = fullConfig.protocol;
-    protocolLocked_[fullConfig.id] = false;
-    clientSessions_[fullConfig.id] = std::vector<ClientSession>();
+    // Initialize protocol using ProtocolManager
+    protocolManager_.setProtocol(fullConfig.id, fullConfig.protocol);
     
     // Initialize statistics
     StreamStatistics stats;
@@ -120,9 +117,10 @@ bool VideoStreamer::removeStream(const std::string& id)
     streamThreads_.erase(id);
     statistics_.erase(id);
     thumbnails_.erase(id);
-    activeProtocols_.erase(id);
-    protocolLocked_.erase(id);
-    clientSessions_.erase(id);
+    
+    // Clean up using manager classes
+    protocolManager_.removeStream(id);
+    sessionManager_.removeStream(id);
     
     LOG_INFO("Stream removed: {}", id);
     return true;
@@ -239,7 +237,7 @@ bool VideoStreamer::startStreaming(const std::string& id)
     }
     
     // Check if there are clients requesting this stream (on-demand)
-    if (clientSessions_[id].empty())
+    if (!sessionManager_.hasActiveClients(id))
     {
         LOG_WARN("No clients for stream {}, not starting (on-demand mode)", id);
         return false;
@@ -255,7 +253,7 @@ bool VideoStreamer::startStreaming(const std::string& id)
     streamThreads_[id] = std::thread(&VideoStreamer::streamThread, this, id);
     
     LOG_INFO("Stream started: {} (protocol: {}, clients: {})", 
-             id, static_cast<int>(activeProtocols_[id]), clientSessions_[id].size());
+             id, static_cast<int>(protocolManager_.getProtocol(id)), sessionManager_.getClientCount(id));
     return true;
 }
 
@@ -284,7 +282,7 @@ bool VideoStreamer::stopStreaming(const std::string& id)
     }
     
     // Unlock protocol when streaming stops
-    protocolLocked_[id] = false;
+    protocolManager_.unlockProtocol(id);
     
     LOG_INFO("Stream stopped: {} (protocol unlocked)", id);
     return true;
@@ -777,85 +775,30 @@ std::vector<uint8_t> VideoStreamer::generateThumbnail(const std::string& id, int
     return thumbnail;
 }
 
-// Protocol management implementation
+// Protocol management implementation (delegated to ProtocolManager)
 bool VideoStreamer::setStreamProtocol(const std::string& id, StreamProtocol protocol)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    if (streams_.find(id) == streams_.end())
-    {
-        LOG_WARN("Stream not found: {}", id);
-        return false;
-    }
-    
-    // Only allow protocol change if not locked or no clients
-    if (protocolLocked_[id] && !clientSessions_[id].empty())
-    {
-        LOG_WARN("Protocol locked for stream: {} ({} active clients)", id, clientSessions_[id].size());
-        return false;
-    }
-    
-    activeProtocols_[id] = protocol;
-    protocolLocked_[id] = !clientSessions_[id].empty(); // Lock if there are clients
-    
-    LOG_INFO("Protocol set for stream {}: {}", id, static_cast<int>(protocol));
-    return true;
+    return protocolManager_.setProtocol(id, protocol);
 }
 
 StreamProtocol VideoStreamer::getStreamProtocol(const std::string& id) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = activeProtocols_.find(id);
-    if (it != activeProtocols_.end())
-    {
-        return it->second;
-    }
-    
-    // Return default protocol if not set
-    return StreamProtocol::MJPEG;
+    return protocolManager_.getProtocol(id);
 }
 
 bool VideoStreamer::isProtocolLocked(const std::string& id) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = protocolLocked_.find(id);
-    if (it != protocolLocked_.end())
-    {
-        return it->second;
-    }
-    
-    return false;
+    return protocolManager_.isLocked(id);
 }
 
 bool VideoStreamer::canUseProtocol(const std::string& id, StreamProtocol protocol) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    // If no active protocol, any protocol is allowed
-    auto it = activeProtocols_.find(id);
-    if (it == activeProtocols_.end())
-    {
-        return true;
-    }
-    
-    // If protocol is locked, only matching protocol is allowed
-    auto lockedIt = protocolLocked_.find(id);
-    if (lockedIt != protocolLocked_.end() && lockedIt->second)
-    {
-        return it->second == protocol;
-    }
-    
-    // If not locked, any protocol is allowed
-    return true;
+    return protocolManager_.canUseProtocol(id, protocol);
 }
 
-// Client session management implementation
+// Client session management implementation (delegated to SessionManager)
 bool VideoStreamer::addClientSession(const std::string& id, const std::string& clientId, StreamProtocol protocol)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
     if (streams_.find(id) == streams_.end())
     {
         LOG_WARN("Stream not found: {}", id);
@@ -866,126 +809,59 @@ bool VideoStreamer::addClientSession(const std::string& id, const std::string& c
     if (!canUseProtocol(id, protocol))
     {
         LOG_WARN("Protocol mismatch for stream {}: requested {}, active {}", 
-                 id, static_cast<int>(protocol), static_cast<int>(activeProtocols_[id]));
+                 id, static_cast<int>(protocol), static_cast<int>(getStreamProtocol(id)));
         return false;
     }
     
     // Set protocol if first client
-    if (clientSessions_[id].empty())
+    if (sessionManager_.getClientCount(id) == 0)
     {
-        activeProtocols_[id] = protocol;
-        protocolLocked_[id] = true;
+        protocolManager_.setProtocol(id, protocol);
         LOG_INFO("First client for stream {}, protocol set to: {}", id, static_cast<int>(protocol));
     }
     
-    // Create session
-    ClientSession session;
-    session.sessionId = clientId + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-    session.clientId = clientId;
-    session.protocol = protocol;
-    session.connectTime = std::chrono::system_clock::now().time_since_epoch().count();
-    session.lastFrameTime = 0;
-    session.bytesReceived = 0;
-    session.framesReceived = 0;
+    // Add session using SessionManager
+    bool success = sessionManager_.addSession(id, clientId, protocol);
     
-    clientSessions_[id].push_back(session);
+    if (success)
+    {
+        // Update statistics
+        statistics_[id].currentViewers = sessionManager_.getClientCount(id);
+        statistics_[id].clientConnections++;
+    }
     
-    // Update statistics
-    statistics_[id].currentViewers = clientSessions_[id].size();
-    statistics_[id].clientConnections++;
-    
-    LOG_INFO("Client session added for stream {}: {} (total clients: {})", 
-             id, clientId, clientSessions_[id].size());
-    
-    return true;
+    return success;
 }
 
 bool VideoStreamer::removeClientSession(const std::string& id, const std::string& clientId)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    bool success = sessionManager_.removeSession(id, clientId);
     
-    auto it = clientSessions_.find(id);
-    if (it == clientSessions_.end())
+    if (success)
     {
-        LOG_WARN("No sessions for stream: {}", id);
-        return false;
-    }
-    
-    // Find and remove session
-    auto& sessions = it->second;
-    auto sessionIt = std::remove_if(sessions.begin(), sessions.end(),
-        [&clientId](const ClientSession& session) {
-            return session.clientId == clientId;
-        });
-    
-    if (sessionIt != sessions.end())
-    {
-        sessions.erase(sessionIt, sessions.end());
-        
         // Update statistics
-        statistics_[id].currentViewers = sessions.size();
+        statistics_[id].currentViewers = sessionManager_.getClientCount(id);
         
         // Unlock protocol if no more clients
-        if (sessions.empty())
+        if (!sessionManager_.hasActiveClients(id))
         {
-            protocolLocked_[id] = false;
+            protocolManager_.unlockProtocol(id);
             LOG_INFO("Last client disconnected from stream {}, protocol unlocked", id);
         }
-        
-        LOG_INFO("Client session removed for stream {}: {} (remaining clients: {})", 
-                 id, clientId, sessions.size());
-        
-        return true;
     }
     
-    LOG_WARN("Client session not found for stream {}: {}", id, clientId);
-    return false;
+    return success;
 }
 
 int VideoStreamer::getClientCount(const std::string& id) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = clientSessions_.find(id);
-    if (it != clientSessions_.end())
-    {
-        return it->second.size();
-    }
-    
-    return 0;
+    return sessionManager_.getClientCount(id);
 }
 
-// Camera auto-detection implementation
+// Camera auto-detection implementation (delegated to CameraDetector)
 std::vector<StreamConfig> VideoStreamer::autoDetectCameras()
 {
-    std::vector<StreamConfig> cameras;
-    
-    // Detect video devices
-    for (int i = 0; i < 4; i++)
-    {
-        std::string device = "/dev/video" + std::to_string(i);
-        if (std::filesystem::exists(device))
-        {
-            StreamConfig config;
-            config.id = "camera_" + std::to_string(i);
-            config.name = "Camera " + std::to_string(i);
-            config.type = StreamSourceType::CAMERA_DEVICE;
-            config.protocol = StreamProtocol::MJPEG; // Default protocol
-            config.sourcePath = device;
-            config.enabled = true;
-            config.loop = false;
-            config.quality = 80;
-            config.bufferSize = 1048576; // 1MB default
-            config.segmentDuration = 10; // 10 seconds default
-            config.port = 8554 + i;
-            
-            cameras.push_back(config);
-            
-            LOG_INFO("Auto-detected camera: {} at {}", config.id, device);
-        }
-    }
-    
-    return cameras;
+    return cameraDetector_.detectCameras();
 }
 
 } // namespace embed::bmcweb::streaming

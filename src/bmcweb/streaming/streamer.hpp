@@ -2,6 +2,9 @@
 
 #include "stream_types.hpp"
 #include "recording_manager.hpp"
+#include "protocol_manager.hpp"
+#include "session_manager.hpp"
+#include "camera_detector.hpp"
 #include <memory>
 #include <vector>
 #include <mutex>
@@ -43,18 +46,18 @@ class VideoStreamer
     bool stopStreaming(const std::string& id);
     bool isStreaming(const std::string& id) const;
     
-    // Protocol management
+    // Protocol management (delegated to ProtocolManager)
     bool setStreamProtocol(const std::string& id, StreamProtocol protocol);
     StreamProtocol getStreamProtocol(const std::string& id) const;
     bool isProtocolLocked(const std::string& id) const;
     bool canUseProtocol(const std::string& id, StreamProtocol protocol) const;
     
-    // Client session management
+    // Client session management (delegated to SessionManager)
     bool addClientSession(const std::string& id, const std::string& clientId, StreamProtocol protocol);
     bool removeClientSession(const std::string& id, const std::string& clientId);
     int getClientCount(const std::string& id) const;
     
-    // Camera auto-detection
+    // Camera auto-detection (delegated to CameraDetector)
     std::vector<StreamConfig> autoDetectCameras();
     
     // HTTP range request support
@@ -103,12 +106,10 @@ class VideoStreamer
     std::unordered_map<std::string, std::vector<uint8_t>> thumbnails_;
     std::string thumbnailPath_;
     
-    // Protocol locking
-    std::unordered_map<std::string, StreamProtocol> activeProtocols_;
-    std::unordered_map<std::string, bool> protocolLocked_;
-    
-    // Client session management
-    std::unordered_map<std::string, std::vector<ClientSession>> clientSessions_;
+    // Manager classes for better modularity
+    ProtocolManager protocolManager_;
+    SessionManager sessionManager_;
+    CameraDetector cameraDetector_;
 };
 
 } // namespace embed::bmcweb::streaming

@@ -37,8 +37,12 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/hardware/sensor.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/config/config.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/user/user.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/routes/streaming_routes.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/streamer.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/recording_manager.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/protocol_manager.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/session_manager.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/camera_detector.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/authorization/permission.cpp
 )
 
