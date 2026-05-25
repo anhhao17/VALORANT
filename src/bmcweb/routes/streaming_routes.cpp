@@ -1,6 +1,8 @@
 #include "streaming_routes.hpp"
 #include "../streaming/streamer.hpp"
 #include "../logging.hpp"
+#include "../session.hpp"
+#include "../user/user.hpp"
 #include <boost/beast/http/field.hpp>
 #include <fstream>
 #include <iterator>
@@ -15,11 +17,126 @@ void registerStreamingRoutes(App& app)
 {
     LOG_INFO("Registering streaming routes");
 
-    // GET /api/streams - List all streams
+    // Helper function to check if user is authenticated
+    auto isAuthenticated = [](const Request& req) -> bool {
+        std::string sessionToken;
+        
+        // Try cookie first
+        std::string cookieHeader = req.getHeaderValue(field::cookie);
+        if (!cookieHeader.empty())
+        {
+            size_t pos = cookieHeader.find("SESSION=");
+            if (pos != std::string::npos)
+            {
+                size_t start = pos + 8;
+                size_t end = cookieHeader.find(';', start);
+                if (end == std::string::npos)
+                {
+                    end = cookieHeader.length();
+                }
+                sessionToken = cookieHeader.substr(start, end - start);
+            }
+        }
+        
+        // Try authorization header as fallback
+        if (sessionToken.empty())
+        {
+            std::string authHeader = req.getHeaderValue(field::authorization);
+            if (!authHeader.empty() && authHeader.substr(0, 6) == "Token ")
+            {
+                sessionToken = authHeader.substr(6);
+            }
+        }
+        
+        if (sessionToken.empty())
+        {
+            return false;
+        }
+        
+        auto& sessionStore = SessionStore::getInstance();
+        auto session = sessionStore.loginSessionByToken(sessionToken);
+        
+        return session != nullptr;
+    };
+
+    // Helper function to check if user is admin
+    auto isAdmin = [](const Request& req) -> bool {
+        std::string sessionToken;
+        
+        // Try cookie first
+        std::string cookieHeader = req.getHeaderValue(field::cookie);
+        if (!cookieHeader.empty())
+        {
+            size_t pos = cookieHeader.find("SESSION=");
+            if (pos != std::string::npos)
+            {
+                size_t start = pos + 8;
+                size_t end = cookieHeader.find(';', start);
+                if (end == std::string::npos)
+                {
+                    end = cookieHeader.length();
+                }
+                sessionToken = cookieHeader.substr(start, end - start);
+            }
+        }
+        
+        // Try authorization header as fallback
+        if (sessionToken.empty())
+        {
+            std::string authHeader = req.getHeaderValue(field::authorization);
+            if (!authHeader.empty() && authHeader.substr(0, 6) == "Token ")
+            {
+                sessionToken = authHeader.substr(6);
+            }
+        }
+        
+        if (sessionToken.empty())
+        {
+            return false;
+        }
+        
+        auto& sessionStore = SessionStore::getInstance();
+        auto session = sessionStore.loginSessionByToken(sessionToken);
+        
+        if (!session)
+        {
+            return false;
+        }
+        
+        // Get actual user role from UserManager
+        try
+        {
+            auto& userManager = user::UserManager::getInstance();
+            auto userInfo = userManager.getUser(session->username);
+            
+            if (!userInfo)
+            {
+                return false;
+            }
+            
+            return userInfo->role == "admin";
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("UserManager error in isAdmin: {}", e.what());
+            return session->username == "admin";
+        }
+    };
+
+    // GET /api/streams - List all streams (authenticated)
     JETSON_ROUTE(app, "/api/streams")
         .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
+        .setHandler([isAuthenticated](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check authentication
+            if (!isAuthenticated(req))
+            {
+                LOG_WARN("Unauthenticated user attempted to list streams");
+                asyncResp->res.result(status::unauthorized);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Authentication required\"}");
+                return;
+            }
             LOG_INFO("GET /api/streams called");
 
             try
@@ -57,11 +174,20 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // GET /api/streams/detect - Auto-detect cameras
+    // GET /api/streams/detect - Auto-detect cameras (admin only)
     JETSON_ROUTE(app, "/api/streams/detect")
         .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
+        .setHandler([isAdmin](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check if user is admin
+            if (!isAdmin(req))
+            {
+                LOG_WARN("Non-admin user attempted to detect cameras");
+                asyncResp->res.result(status::forbidden);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Admin access required\"}");
+                return;
+            }
             LOG_INFO("GET /api/streams/detect called");
 
             try
@@ -105,11 +231,20 @@ void registerStreamingRoutes(App& app)
     // Streams are now configured server-side via command line or config file
     // UI can only GET available streams and start/stop them
 
-    // POST /api/streams/{id}/start - Start streaming
+    // POST /api/streams/{id}/start - Start streaming (authenticated)
     JETSON_ROUTE(app, "/api/streams/*/start")
         .setMethods({boost::beast::http::verb::post})
-        .setHandler([](const Request& req,
+        .setHandler([isAuthenticated](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check authentication
+            if (!isAuthenticated(req))
+            {
+                LOG_WARN("Unauthenticated user attempted to start streaming");
+                asyncResp->res.result(status::unauthorized);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Authentication required\"}");
+                return;
+            }
             std::string target = std::string(req.target());
             LOG_INFO("POST /api/streams/*/start called");
 
@@ -163,11 +298,20 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // POST /api/streams/{id}/stop - Stop streaming
+    // POST /api/streams/{id}/stop - Stop streaming (authenticated)
     JETSON_ROUTE(app, "/api/streams/*/stop")
         .setMethods({boost::beast::http::verb::post})
-        .setHandler([](const Request& req,
+        .setHandler([isAuthenticated](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check authentication
+            if (!isAuthenticated(req))
+            {
+                LOG_WARN("Unauthenticated user attempted to stop streaming");
+                asyncResp->res.result(status::unauthorized);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Authentication required\"}");
+                return;
+            }
             std::string target = std::string(req.target());
             LOG_INFO("POST /api/streams/*/stop called");
 
@@ -221,11 +365,20 @@ void registerStreamingRoutes(App& app)
             }
         });
 
-    // GET /api/streams/{id}/status - Get stream protocol status
+    // GET /api/streams/{id}/status - Get stream protocol status (authenticated)
     JETSON_ROUTE(app, "/api/streams/*/status")
         .setMethods({boost::beast::http::verb::get})
-        .setHandler([](const Request& req,
+        .setHandler([isAuthenticated](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check authentication
+            if (!isAuthenticated(req))
+            {
+                LOG_WARN("Unauthenticated user attempted to get stream status");
+                asyncResp->res.result(status::unauthorized);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Authentication required\"}");
+                return;
+            }
             std::string target = std::string(req.target());
             LOG_INFO("GET {} called", target);
 

@@ -28,7 +28,7 @@ fi
 echo "Checking Python dependencies..."
 if ! python3 -c "import requests" 2>/dev/null; then
     echo "Installing Python dependencies..."
-    pip3 install -r requirements.txt
+    pip3 install -r /home/hao/app/jetson/tests/requirements.txt
 fi
 
 # Run the tests

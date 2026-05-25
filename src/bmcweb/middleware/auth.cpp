@@ -77,11 +77,10 @@ bool AuthMiddleware::validateBasicAuth(const Request& req)
         return false;
     }
 
-    // Decode base64 and validate credentials using UserManager
-    // For simplicity, we'll just accept Basic auth for now
-    // In production, decode base64 and validate with UserManager
-    LOG_DEBUG("Basic authentication accepted");
-    return true;
+    // Basic auth is disabled for security reasons
+    // Use token-based or cookie-based authentication instead
+    LOG_WARN("Basic authentication attempt rejected - use token or cookie auth");
+    return false;
 }
 
 bool AuthMiddleware::validateCsrfToken(const Request& req, const std::string& csrfToken)
@@ -117,9 +116,9 @@ void AuthMiddleware::process(
         return;
     }
 
-    // Skip authentication for login/logout/config/sessions endpoints
+    // Skip authentication for login/logout/sessions endpoints
     if (target == "/api/login" || target == "/api/logout" || target == "/api/session" ||
-        target == "/api/system/sessions" || target.find("/api/config") == 0)
+        target == "/api/system/sessions")
     {
         LOG_TRACE("Skipping authentication for public endpoint: {}", target);
         next();
@@ -173,11 +172,6 @@ void AuthMiddleware::process(
     }
     // Try token authentication
     else if (validateTokenAuth(req))
-    {
-        authenticated = true;
-    }
-    // Try basic authentication as fallback
-    else if (validateBasicAuth(req))
     {
         authenticated = true;
     }

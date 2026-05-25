@@ -1,6 +1,8 @@
 #include "config_api.hpp"
 #include "../config/yaml_config.hpp"
 #include "../logging.hpp"
+#include "../session.hpp"
+#include "../user/user.hpp"
 #include <nlohmann/json.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>
@@ -12,10 +14,83 @@ namespace embed::bmcweb::routes
 
 void registerConfigAPIRoutes(App& app, config::AppConfig& globalConfig)
 {
-    // GET /api/config - Get current configuration
+    // Helper function to check if user is admin
+    auto isAdmin = [](const Request& req) -> bool {
+        std::string sessionToken;
+        
+        // Try cookie first
+        std::string cookieHeader = req.getHeaderValue(field::cookie);
+        if (!cookieHeader.empty())
+        {
+            size_t pos = cookieHeader.find("SESSION=");
+            if (pos != std::string::npos)
+            {
+                size_t start = pos + 8;
+                size_t end = cookieHeader.find(';', start);
+                if (end == std::string::npos)
+                {
+                    end = cookieHeader.length();
+                }
+                sessionToken = cookieHeader.substr(start, end - start);
+            }
+        }
+        
+        // Try authorization header as fallback
+        if (sessionToken.empty())
+        {
+            std::string authHeader = req.getHeaderValue(field::authorization);
+            if (!authHeader.empty() && authHeader.substr(0, 6) == "Token ")
+            {
+                sessionToken = authHeader.substr(6);
+            }
+        }
+        
+        if (sessionToken.empty())
+        {
+            return false;
+        }
+        
+        auto& sessionStore = SessionStore::getInstance();
+        auto session = sessionStore.loginSessionByToken(sessionToken);
+        
+        if (!session)
+        {
+            return false;
+        }
+        
+        // Get actual user role from UserManager
+        try
+        {
+            auto& userManager = user::UserManager::getInstance();
+            auto userInfo = userManager.getUser(session->username);
+            
+            if (!userInfo)
+            {
+                return false;
+            }
+            
+            return userInfo->role == "admin";
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("UserManager error in isAdmin: {}", e.what());
+            return session->username == "admin";
+        }
+    };
+
+    // GET /api/config - Get current configuration (admin only)
     JETSON_ROUTE(app, "/api/config")
-        .setHandler([&globalConfig](const Request&,
+        .setHandler([&globalConfig, isAdmin](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check if user is admin
+            if (!isAdmin(req))
+            {
+                LOG_WARN("Non-admin user attempted to access configuration");
+                asyncResp->res.result(status::forbidden);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Admin access required\"}");
+                return;
+            }
             try
             {
                 LOG_DEBUG("Config GET endpoint called");
@@ -107,11 +182,20 @@ void registerConfigAPIRoutes(App& app, config::AppConfig& globalConfig)
             }
         });
     
-    // PUT /api/config - Update configuration
+    // PUT /api/config - Update configuration (admin only)
     JETSON_ROUTE(app, "/api/config")
         .setMethods({boost::beast::http::verb::put})
-        .setHandler([&globalConfig](const Request& req,
+        .setHandler([&globalConfig, isAdmin](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
+            // Check if user is admin
+            if (!isAdmin(req))
+            {
+                LOG_WARN("Non-admin user attempted to update configuration");
+                asyncResp->res.result(status::forbidden);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Admin access required\"}");
+                return;
+            }
             try
             {
                 LOG_DEBUG("Config PUT endpoint called");
