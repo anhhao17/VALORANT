@@ -4,6 +4,8 @@
 
 The streaming system uses a protocol interface pattern to provide a clean, extensible architecture for supporting multiple streaming protocols (MJPEG, UDP/RTP, RTSP, WebRTC, HLS). Each protocol implements a common interface while providing protocol-specific optimizations and features.
 
+Additionally, the system uses a frame source interface pattern for video capture, allowing different video sources (real cameras, video files, test patterns) to feed frames into the streaming system through a callback mechanism.
+
 ## Architecture Diagram
 
 ```mermaid
@@ -669,3 +671,268 @@ if (protocol) {
 ```
 
 This architecture provides a solid foundation for streaming multiple protocols while maintaining resource efficiency and code organization.
+
+## Frame Source Interface Architecture
+
+The streaming system also implements a frame source interface pattern to decouple frame capture from protocol processing. This allows different video sources to feed frames into the streaming system through a callback mechanism.
+
+### Frame Source Interface Diagram
+
+```mermaid
+graph TB
+    VS[VideoStreamer]
+    
+    subgraph FS [Frame Sources]
+        FC[CameraCapture<br/>Real Hardware]
+        FV[FileCapture<br/>Video Files]
+        FT[TestPatternCapture<br/>Generated Patterns]
+        FN[NetworkStreamCapture<br/>Network Streams]
+        FI[ImageSequenceCapture<br/>Image Sequences]
+    end
+    
+    subgraph IFS [IFrameSource Interface]
+        I1[initialize config]
+        I2[startCapture]
+        I3[stopCapture]
+        I4[setFrameCallback]
+        I5[getStatistics]
+        I6[supportsSeeking]
+    end
+    
+    subgraph VS [VideoStreamer]
+        V1[Frame Source Management]
+        V2[Protocol Management]
+        V3[Session Management]
+    end
+    
+    subgraph IP [IProtocol Interface]
+        P1[processFrame]
+        P2[handleClientConnect]
+        P3[getStatistics]
+    end
+    
+    VS --> FS
+    FS --> IFS
+    IFS --> VS
+    VS --> IP
+    
+    style VS fill:#e1f5ff
+    style FS fill:#fff4e1
+    style IFS fill:#e8f5e9
+    style VS fill:#f3e5f5
+    style IP fill:#fce4ec
+    style FC fill:#ffebee
+    style FV fill:#e3f2fd
+    style FT fill:#fff3e0
+    style FN fill:#e8f5e9
+    style FI fill:#fce4ec
+```
+
+### Frame Source Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant FS as Frame Source
+    participant VS as VideoStreamer
+    participant PM as ProtocolManager
+    participant Proto as Protocol Instance
+    participant Client as Client
+    
+    Note over FS,Client: Frame Capture and Processing Flow
+    
+    FS->>VS: Frame ready
+    VS->>VS: onFrameReceived callback
+    VS->>PM: getProtocolInstance
+    PM-->>VS: Protocol instance
+    VS->>Proto: processFrame frame
+    Proto->>Proto: Protocol-specific processing
+    Proto->>VS: Frame processed
+    VS->>VS: Update statistics
+    VS->>Client: Deliver frame
+```
+
+### Frame Source Interface
+
+```mermaid
+classDiagram
+    class IFrameSource {
+        <<interface>>
+        +initialize(config) bool
+        +startCapture() bool
+        +stopCapture() bool
+        +isCapturing() bool
+        +setFrameCallback(callback) void
+        +getConfiguration() string
+        +getSourceType() FrameSourceType
+        +getSourceName() string
+        +getStatistics() string
+        +updateConfiguration(config) bool
+        +supportsSeeking() bool
+        +seek(timestamp) bool
+        +getCurrentPosition() int64
+        +getDuration() int64
+        +cleanup() void
+    }
+    
+    class CameraCapture {
+        -deviceHandle_ void*
+        -framesCaptured_ uint64
+        -bytesCaptured_ uint64
+        -droppedFrames_ uint64
+        +getDevicePath() string
+        +getSupportedFormats() vector
+        +getSupportedResolutions() vector
+    }
+    
+    class FileCapture {
+        -fileData_ vector
+        -fileDuration_ int64
+        -looping_ bool
+        +setLooping(loop) bool
+        +isLooping() bool
+        +getFilePath() string
+    }
+    
+    class TestPatternCapture {
+        -pattern_ TestPattern
+        -solidColor_ uint8_t[3]
+        +setTestPattern(pattern) void
+        +getTestPattern() TestPattern
+        +setSolidColor(r,g,b) void
+    }
+    
+    IFrameSource <|-- CameraCapture
+    IFrameSource <|-- FileCapture
+    IFrameSource <|-- TestPatternCapture
+```
+
+### Frame Source Factory
+
+```mermaid
+graph TB
+    subgraph FSF [FrameSourceFactory]
+        CFS[createFrameSource type]
+        GST[getSupportedSourceTypes]
+        ISS[isSourceTypeSupported type]
+    end
+    
+    subgraph Types [Source Types]
+        T1[CAMERA_DEVICE]
+        T2[VIDEO_FILE]
+        T3[TEST_PATTERN]
+        T4[NETWORK_STREAM]
+        T5[IMAGE_SEQUENCE]
+    end
+    
+    subgraph Implementations [Implementations]
+        I1[CameraCapture]
+        I2[FileCapture]
+        I3[TestPatternCapture]
+    end
+    
+    CFS --> Types
+    GST --> Types
+    ISS --> Types
+    T1 --> I1
+    T2 --> I2
+    T3 --> I3
+    
+    style FSF fill:#e8f5e9
+    style Types fill:#fff3e0
+    style Implementations fill:#e3f2fd
+```
+
+### Frame Source Integration
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant VS as VideoStreamer
+    participant FSF as FrameSourceFactory
+    participant FS as FrameSource
+    participant Proto as Protocol
+    
+    User->>VS: addStream config
+    VS->>VS: Determine source type
+    VS->>FSF: createFrameSource type
+    FSF->>FS: Create instance
+    FSF-->>VS: Frame source
+    VS->>FS: initialize config
+    VS->>FS: setFrameCallback
+    Note over VS,FS: Callback: onFrameReceived
+    VS->>VS: Store frame source
+    
+    User->>VS: startStreaming id
+    VS->>FS: startCapture
+    FS->>FS: Start capture thread
+    loop Frame Generation
+        FS->>VS: Frame ready callback
+        VS->>VS: onFrameReceived
+        VS->>Proto: processFrame frame
+        Proto->>VS: Frame processed
+    end
+```
+
+### Frame Source Features
+
+**CameraCapture:**
+- Real hardware camera support via V4L2
+- Configurable resolution, frame rate, pixel format
+- Frame drop detection and statistics
+- Hardware acceleration support
+
+**FileCapture:**
+- Video file playback with seeking support
+- Configurable looping behavior
+- Frame position and duration tracking
+- Multiple video format support
+
+**TestPatternCapture:**
+- Generated test patterns for development
+- Multiple pattern types (color bars, gradient, noise, etc.)
+- Configurable resolution and frame rate
+- Useful for testing without hardware
+
+### Development Benefits
+
+```mermaid
+mindmap
+  root((Frame Source Benefits))
+    Development
+      Test without hardware
+      Simulate various scenarios
+      Easy debugging
+      Isolate issues
+    Flexibility
+      Switch sources dynamically
+      Add new sources easily
+      Runtime configuration
+      Plugin architecture
+    Testing
+      Deterministic test patterns
+      Reproducible scenarios
+      Performance testing
+      Load testing
+    Production
+      Real hardware support
+      File playback
+      Network streaming
+      Multiple sources per system
+    Maintenance
+      Clear separation of concerns
+      Easy to extend
+      Isolated bugs
+      Simplified testing
+```
+
+### Combined Architecture
+
+The frame source interface works seamlessly with the protocol interface:
+
+1. **Frame Sources** capture video frames from various sources
+2. **Frame Callbacks** deliver frames to VideoStreamer
+3. **Protocol Processing** handles frame encoding and delivery
+4. **Client Management** tracks connected clients
+5. **Resource Efficiency** maintains single protocol per stream
+
+This dual interface pattern provides maximum flexibility while maintaining the resource-efficient single-protocol-per-stream constraint designed for Jetson/Pi devices.

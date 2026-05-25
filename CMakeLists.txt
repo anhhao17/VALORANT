@@ -61,6 +61,10 @@ add_executable(jetson
     src/bmcweb/streaming/rtsp_protocol.cpp
     src/bmcweb/streaming/webrtc_protocol.cpp
     src/bmcweb/streaming/hls_protocol.cpp
+    src/bmcweb/streaming/frame_source_interface.cpp
+    src/bmcweb/streaming/camera_capture.cpp
+    src/bmcweb/streaming/file_capture.cpp
+    src/bmcweb/streaming/test_pattern_capture.cpp
     src/bmcweb/authorization/permission.cpp
 )
 

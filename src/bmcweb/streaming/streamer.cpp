@@ -75,6 +75,68 @@ bool VideoStreamer::addStream(const StreamConfig& config)
     protocolManager_.setProtocol(fullConfig.id, fullConfig.protocol);
     protocolManager_.createProtocolInstance(fullConfig.id, fullConfig);
     
+    // Create frame source based on stream type
+    FrameSourceType frameSourceType;
+    switch (config.type)
+    {
+        case StreamSourceType::CAMERA_DEVICE:
+            frameSourceType = FrameSourceType::CAMERA_DEVICE;
+            break;
+        case StreamSourceType::MP4_FILE:
+            frameSourceType = FrameSourceType::VIDEO_FILE;
+            break;
+        case StreamSourceType::NETWORK_STREAM:
+            frameSourceType = FrameSourceType::NETWORK_STREAM;
+            break;
+        default:
+            frameSourceType = FrameSourceType::TEST_PATTERN;
+            break;
+    }
+    
+    auto frameSource = FrameSourceFactory::createFrameSource(frameSourceType);
+    if (frameSource)
+    {
+        FrameSourceConfig frameConfig;
+        frameConfig.id = config.id;
+        frameConfig.name = config.name;
+        frameConfig.type = frameSourceType;
+        frameConfig.sourcePath = config.sourcePath;
+        frameConfig.width = 640; // Default width
+        frameConfig.height = 480; // Default height
+        frameConfig.frameRate = 30; // Default frame rate
+        frameConfig.pixelFormat = "RGB24";
+        frameConfig.loop = config.loop;
+        
+        if (frameSource->initialize(frameConfig))
+        {
+            // Set callback to receive frames from frame source
+            frameSource->setFrameCallback([this, id = config.id](const VideoFrame& frame) {
+                this->onFrameReceived(id, frame);
+            });
+            
+            frameSources_[config.id] = std::move(frameSource);
+            LOG_INFO("Frame source created for stream: {}", config.id);
+        }
+        else
+        {
+            LOG_ERROR("Failed to initialize frame source for stream: {}", config.id);
+        }
+    }
+    else
+    {
+        LOG_WARN("Failed to create frame source for stream: {}, using legacy mode", config.id);
+        // Fall back to legacy MP4 file loading
+        if (config.type == StreamSourceType::MP4_FILE)
+        {
+            if (!std::filesystem::exists(config.sourcePath))
+            {
+                LOG_ERROR("MP4 file not found: {}", config.sourcePath);
+                return false;
+            }
+            loadMp4File(config.id);
+        }
+    }
+    
     // Initialize statistics
     StreamStatistics stats;
     stats.bytesServed = 0;
@@ -118,6 +180,9 @@ bool VideoStreamer::removeStream(const std::string& id)
     streamThreads_.erase(id);
     statistics_.erase(id);
     thumbnails_.erase(id);
+    
+    // Clean up frame source
+    removeFrameSource(id);
     
     // Clean up using manager classes
     protocolManager_.removeStream(id);
@@ -251,7 +316,18 @@ bool VideoStreamer::startStreaming(const std::string& id)
         std::chrono::system_clock::now().time_since_epoch()).count();
     statistics_[id].startTime = now;
     
-    streamThreads_[id] = std::thread(&VideoStreamer::streamThread, this, id);
+    // Start frame source capture if available
+    auto frameSource = getFrameSource(id);
+    if (frameSource)
+    {
+        frameSource->startCapture();
+        LOG_INFO("Frame source started for stream: {}", id);
+    }
+    else
+    {
+        // Fall back to legacy streaming thread
+        streamThreads_[id] = std::thread(&VideoStreamer::streamThread, this, id);
+    }
     
     LOG_INFO("Stream started: {} (protocol: {}, clients: {})", 
              id, static_cast<int>(protocolManager_.getProtocol(id)), sessionManager_.getClientCount(id));
@@ -276,6 +352,14 @@ bool VideoStreamer::stopStreaming(const std::string& id)
     }
     
     streaming_[id] = false;
+    
+    // Stop frame source capture if available
+    auto frameSource = getFrameSource(id);
+    if (frameSource)
+    {
+        frameSource->stopCapture();
+        LOG_INFO("Frame source stopped for stream: {}", id);
+    }
     
     if (streamThreads_[id].joinable())
     {
@@ -863,6 +947,88 @@ int VideoStreamer::getClientCount(const std::string& id) const
 std::vector<StreamConfig> VideoStreamer::autoDetectCameras()
 {
     return cameraDetector_.detectCameras();
+}
+
+// Frame source management implementation
+bool VideoStreamer::setFrameSource(const std::string& id, std::shared_ptr<IFrameSource> frameSource)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    if (streams_.find(id) == streams_.end())
+    {
+        LOG_WARN("Stream not found: {}", id);
+        return false;
+    }
+    
+    // Remove existing frame source if present
+    removeFrameSource(id);
+    
+    // Set callback to receive frames from frame source
+    frameSource->setFrameCallback([this, id](const VideoFrame& frame) {
+        this->onFrameReceived(id, frame);
+    });
+    
+    frameSources_[id] = frameSource;
+    LOG_INFO("Frame source set for stream: {}", id);
+    return true;
+}
+
+std::shared_ptr<IFrameSource> VideoStreamer::getFrameSource(const std::string& id) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = frameSources_.find(id);
+    if (it != frameSources_.end())
+    {
+        return it->second;
+    }
+    
+    return nullptr;
+}
+
+bool VideoStreamer::removeFrameSource(const std::string& id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = frameSources_.find(id);
+    if (it != frameSources_.end())
+    {
+        if (it->second)
+        {
+            it->second->stopCapture();
+            it->second->cleanup();
+        }
+        frameSources_.erase(it);
+        LOG_INFO("Frame source removed for stream: {}", id);
+        return true;
+    }
+    
+    return false;
+}
+
+// Frame callback handler
+void VideoStreamer::onFrameReceived(const std::string& id, const VideoFrame& frame)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Get protocol instance for this stream
+    auto protocol = protocolManager_.getProtocolInstance(id);
+    if (protocol)
+    {
+        // Process frame through protocol
+        protocol->processFrame(frame);
+    }
+    
+    // Update statistics
+    statistics_[id].framesServed++;
+    statistics_[id].lastFrameTime = frame.timestamp;
+    
+    // Call user callback if set
+    auto callbackIt = frameCallbacks_.find(id);
+    if (callbackIt != frameCallbacks_.end() && callbackIt->second)
+    {
+        callbackIt->second(frame);
+    }
 }
 
 } // namespace embed::bmcweb::streaming

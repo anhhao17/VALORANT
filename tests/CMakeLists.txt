@@ -49,6 +49,10 @@ add_executable(jetson_tests
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/rtsp_protocol.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/webrtc_protocol.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/hls_protocol.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/frame_source_interface.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/camera_capture.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/file_capture.cpp
+    ${CMAKE_SOURCE_DIR}/src/bmcweb/streaming/test_pattern_capture.cpp
     ${CMAKE_SOURCE_DIR}/src/bmcweb/authorization/permission.cpp
 )
 

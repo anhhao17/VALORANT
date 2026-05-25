@@ -5,6 +5,7 @@
 #include "protocol_manager.hpp"
 #include "session_manager.hpp"
 #include "camera_detector.hpp"
+#include "frame_source_interface.hpp"
 #include <memory>
 #include <vector>
 #include <mutex>
@@ -19,7 +20,8 @@ namespace embed::bmcweb::streaming
 /**
  * @brief Video streaming service
  * 
- * Supports MP4 file looping and extensible for real hardware camera feeds.
+ * Supports multiple frame sources (cameras, files, test patterns) with protocol interface.
+ * Uses callback pattern for frame delivery from frame sources to protocol implementations.
  */
 class VideoStreamer
 {
@@ -51,6 +53,11 @@ class VideoStreamer
     StreamProtocol getStreamProtocol(const std::string& id) const;
     bool isProtocolLocked(const std::string& id) const;
     bool canUseProtocol(const std::string& id, StreamProtocol protocol) const;
+    
+    // Frame source management
+    bool setFrameSource(const std::string& id, std::shared_ptr<IFrameSource> frameSource);
+    std::shared_ptr<IFrameSource> getFrameSource(const std::string& id) const;
+    bool removeFrameSource(const std::string& id);
     
     // Client session management (delegated to SessionManager)
     bool addClientSession(const std::string& id, const std::string& clientId, StreamProtocol protocol);
@@ -95,6 +102,7 @@ class VideoStreamer
     void loadMp4File(const std::string& id);
     void updateStatistics(const std::string& id, size_t bytesServed);
     std::string generateThumbnailPath(const std::string& id) const;
+    void onFrameReceived(const std::string& id, const VideoFrame& frame);
     
     mutable std::mutex mutex_;
     std::unordered_map<std::string, StreamConfig> streams_;
@@ -104,6 +112,7 @@ class VideoStreamer
     std::unordered_map<std::string, std::thread> streamThreads_;
     std::unordered_map<std::string, StreamStatistics> statistics_;
     std::unordered_map<std::string, std::vector<uint8_t>> thumbnails_;
+    std::unordered_map<std::string, std::shared_ptr<IFrameSource>> frameSources_;
     std::string thumbnailPath_;
     
     // Manager classes for better modularity

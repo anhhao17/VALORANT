@@ -9,7 +9,7 @@ namespace embed::bmcweb::streaming
 {
 
 /**
- * @brief Stream source type
+ * @brief Stream source type (legacy, use FrameSourceType for new code)
  */
 enum class StreamSourceType
 {
