@@ -43,6 +43,20 @@ class VideoStreamer
     bool stopStreaming(const std::string& id);
     bool isStreaming(const std::string& id) const;
     
+    // Protocol management
+    bool setStreamProtocol(const std::string& id, StreamProtocol protocol);
+    StreamProtocol getStreamProtocol(const std::string& id) const;
+    bool isProtocolLocked(const std::string& id) const;
+    bool canUseProtocol(const std::string& id, StreamProtocol protocol) const;
+    
+    // Client session management
+    bool addClientSession(const std::string& id, const std::string& clientId, StreamProtocol protocol);
+    bool removeClientSession(const std::string& id, const std::string& clientId);
+    int getClientCount(const std::string& id) const;
+    
+    // Camera auto-detection
+    std::vector<StreamConfig> autoDetectCameras();
+    
     // HTTP range request support
     std::vector<uint8_t> getVideoSegment(const std::string& id, size_t offset, size_t length) const;
     size_t getVideoSize(const std::string& id) const;
@@ -88,6 +102,13 @@ class VideoStreamer
     std::unordered_map<std::string, StreamStatistics> statistics_;
     std::unordered_map<std::string, std::vector<uint8_t>> thumbnails_;
     std::string thumbnailPath_;
+    
+    // Protocol locking
+    std::unordered_map<std::string, StreamProtocol> activeProtocols_;
+    std::unordered_map<std::string, bool> protocolLocked_;
+    
+    // Client session management
+    std::unordered_map<std::string, std::vector<ClientSession>> clientSessions_;
 };
 
 } // namespace embed::bmcweb::streaming

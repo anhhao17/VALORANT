@@ -19,6 +19,18 @@ enum class StreamSourceType
 };
 
 /**
+ * @brief Streaming protocol type
+ */
+enum class StreamProtocol
+{
+    MJPEG,    // Motion JPEG over HTTP (browser-compatible)
+    UDP_RTP,  // UDP/RTP streaming (low latency)
+    RTSP,     // Real-Time Streaming Protocol
+    WEBRTC,   // WebRTC (modern web standard)
+    HLS       // HTTP Live Streaming (adaptive bitrate)
+};
+
+/**
  * @brief Stream recording state
  */
 enum class RecordingState
@@ -36,12 +48,14 @@ struct StreamConfig
     std::string id;
     std::string name;
     StreamSourceType type;
+    StreamProtocol protocol; // Streaming protocol to use
     std::string sourcePath; // MP4 file path or device path
     bool enabled;
     bool loop;
     int quality; // 1-100
     int bufferSize; // Buffer size in bytes
     int segmentDuration; // Segment duration in seconds
+    int port; // Port for UDP/RTSP streaming
 };
 
 /**
@@ -89,5 +103,19 @@ struct VideoFrame
  * @brief Stream frame callback
  */
 using FrameCallback = std::function<void(const VideoFrame&)>;
+
+/**
+ * @brief Client session info
+ */
+struct ClientSession
+{
+    std::string sessionId;
+    std::string clientId;
+    StreamProtocol protocol;
+    int64_t connectTime;
+    int64_t lastFrameTime;
+    uint64_t bytesReceived;
+    uint64_t framesReceived;
+};
 
 } // namespace embed::bmcweb::streaming
