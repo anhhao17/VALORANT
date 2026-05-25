@@ -62,14 +62,21 @@ bool SessionManager::removeSession(const std::string& streamId, const std::strin
 
 int SessionManager::getClientCount(const std::string& streamId) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = clientSessions_.find(streamId);
-    if (it != clientSessions_.end())
+    // Use try_lock to avoid deadlock during initialization
+    if (mutex_.try_lock())
     {
-        return it->second.size();
+        std::lock_guard<std::mutex> lock(mutex_, std::adopt_lock);
+        
+        auto it = clientSessions_.find(streamId);
+        if (it != clientSessions_.end())
+        {
+            return it->second.size();
+        }
+        
+        return 0;
     }
     
+    // If mutex is locked (initialization in progress), return 0
     return 0;
 }
 

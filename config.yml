@@ -1,0 +1,51 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  ssl_port: 8443
+  enable_ssl: false
+  ssl_cert_file: /etc/ssl/certs/server.crt
+  ssl_key_file: /etc/ssl/private/server.key
+  max_connections: 100
+  session_timeout: 3600
+  log_level: debug
+hardware:
+  mode: real
+  sensor_update_interval: 1000
+  temperature:
+    warning_threshold: 70
+    critical_threshold: 85
+  power:
+    warning_threshold: 20
+    critical_threshold: 25
+security:
+  enable_auth: true
+  max_login_attempts: 5
+  session_cookie_name: SESSION
+  csrf_protection: true
+streaming:
+  enable: true
+  max_streams: 10
+  default_protocol: mjpeg
+  auto_detect_cameras: true
+  default_frame_rate: 30
+  default_width: 640
+  default_height: 480
+  default_quality: 80
+  streams:
+    - id: video_source
+      name: Video File Source
+      type: mp4_file
+      source_path: /home/hao/app/jetson/videos/test_video.mp4
+      protocol: mjpeg
+      enabled: true
+      loop: true
+      frame_rate: 30
+      width: 640
+      height: 480
+      quality: 80
+websocket:
+  enable: true
+  max_connections: 10
+  heartbeat_interval: 30
+network:
+  hostname: test-bmc

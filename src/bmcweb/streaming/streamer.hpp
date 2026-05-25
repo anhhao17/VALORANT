@@ -34,6 +34,7 @@ class VideoStreamer
     
     // Stream management
     bool addStream(const StreamConfig& config);
+    bool addStreamMetadata(const StreamConfig& config); // Add metadata only (lazy initialization)
     bool removeStream(const std::string& id);
     bool enableStream(const std::string& id, bool enabled);
     std::vector<StreamConfig> getAllStreams() const;
@@ -58,6 +59,7 @@ class VideoStreamer
     bool setFrameSource(const std::string& id, std::shared_ptr<IFrameSource> frameSource);
     std::shared_ptr<IFrameSource> getFrameSource(const std::string& id) const;
     bool removeFrameSource(const std::string& id);
+    bool initializeFrameSourceForStream(const std::string& id); // Lazy initialization
     
     // Client session management (delegated to SessionManager)
     bool addClientSession(const std::string& id, const std::string& clientId, StreamProtocol protocol);

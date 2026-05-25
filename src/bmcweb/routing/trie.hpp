@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "../logging.hpp"
 
 namespace embed::bmcweb::routing
 {
@@ -54,6 +55,7 @@ class Trie
         }
         current->isEnd = true;
         current->ruleIndices.push_back(ruleIndex);
+        LOG_DEBUG("Added route pattern: {} with index: {}", pattern, ruleIndex);
     }
 
     /**
@@ -71,6 +73,8 @@ class Trie
             return {{}, params};
         }
 
+        LOG_DEBUG("Trie::find() called with URL: {}", url);
+
         // Try exact match first
         auto exactMatch = root_;
         bool exactMatchFound = true;
@@ -87,53 +91,84 @@ class Trie
 
         if (exactMatchFound && exactMatch->isEnd)
         {
+            LOG_DEBUG("Exact match found for URL: {}", url);
             return {exactMatch->ruleIndices, params};
         }
 
-        // Try wildcard matching
+        // Try wildcard matching - handle wildcards in the middle of patterns
         current = root_;
         std::string prefix;
         
         for (size_t i = 0; i < url.length(); i++)
         {
             char c = url[i];
-            if (current->children.find(c) == current->children.end())
+            
+            // Check if current node has a wildcard child (for patterns like "/api/streams/*/start")
+            if (current->children.find('*') != current->children.end())
             {
-                // Check if current node has a wildcard child
-                if (current->children.find('*') != current->children.end())
+                auto wildcardNode = current->children['*'];
+                
+                // Try to match the rest of the pattern after the wildcard
+                std::string remainingUrl = url.substr(i);
+                std::string wildcardParam;
+                
+                // Extract the wildcard parameter (everything until next '/' or end)
+                size_t paramEnd = remainingUrl.find('/');
+                if (paramEnd != std::string::npos)
                 {
-                    // Found wildcard, match the rest
-                    current = current->children['*'];
-                    params.push_back(url.substr(i));
-                    if (current->isEnd)
+                    wildcardParam = remainingUrl.substr(0, paramEnd);
+                    std::string afterWildcard = remainingUrl.substr(paramEnd);
+                    
+                    // Try to match the rest of the pattern after the wildcard
+                    auto matchAfterWildcard = wildcardNode;
+                    bool matchFound = true;
+                    
+                    for (char wc : afterWildcard)
                     {
-                        return {current->ruleIndices, params};
+                        if (matchAfterWildcard->children.find(wc) == matchAfterWildcard->children.end())
+                        {
+                            matchFound = false;
+                            break;
+                        }
+                        matchAfterWildcard = matchAfterWildcard->children[wc];
+                    }
+                    
+                    if (matchFound && matchAfterWildcard->isEnd)
+                    {
+                        params.push_back(wildcardParam);
+                        LOG_DEBUG("Wildcard match found with param: {}, remaining: {}", wildcardParam, afterWildcard);
+                        return {matchAfterWildcard->ruleIndices, params};
                     }
                 }
+                else
+                {
+                    // Wildcard at end of pattern
+                    if (wildcardNode->isEnd)
+                    {
+                        params.push_back(remainingUrl);
+                        LOG_DEBUG("Wildcard match at end with param: {}", remainingUrl);
+                        return {wildcardNode->ruleIndices, params};
+                    }
+                }
+            }
+            
+            if (current->children.find(c) == current->children.end())
+            {
+                LOG_DEBUG("No match found for URL: {}", url);
                 return {{}, params};  // No match
             }
             current = current->children[c];
             prefix += c;
-            
-            // Check if current node has a wildcard child (for patterns like "/api/users/*")
-            if (current->children.find('*') != current->children.end())
-            {
-                auto wildcardNode = current->children['*'];
-                if (wildcardNode->isEnd && i < url.length() - 1)
-                {
-                    // Wildcard matches the rest of the URL
-                    params.push_back(url.substr(i + 1));
-                    return {wildcardNode->ruleIndices, params};
-                }
-            }
         }
 
         // Check if we're at an endpoint
         if (current->isEnd)
         {
+            LOG_DEBUG("Endpoint found at end of URL traversal");
             return {current->ruleIndices, params};
         }
 
+        LOG_DEBUG("No match found for URL: {}", url);
         return {{}, params};  // No match
     }
 

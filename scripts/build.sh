@@ -20,7 +20,7 @@ echo "=========================================="
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" ..
+cmake -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DJETSON_ENABLE_STREAMING=ON ..
 cmake --build . -- -j$(nproc)
 echo "✅ Backend build complete! Binary: ${BUILD_DIR}/jetson"
 echo ""
@@ -51,6 +51,6 @@ echo "Backend binary: ${BUILD_DIR}/jetson"
 echo "Frontend dist: ${WEBUI_DIR}/dist"
 echo ""
 echo "To run the application:"
-echo "  ./build/jetson"
+echo "  ./build/jetson --video-file /home/hao/app/jetson/videos/test_video.mp4 --camera /dev/video0"
 echo ""
 echo "The backend will serve the frontend UI on http://localhost:8080"

@@ -15,12 +15,14 @@
 #include "bmcweb/routes/system.hpp"
 #include "bmcweb/routes/websocket.hpp"
 #include "bmcweb/routes/config.hpp"
+#include "bmcweb/routes/config_api.hpp"
 #include "bmcweb/routes/users.hpp"
 #include "bmcweb/routes/streaming_routes.hpp"
 #include "bmcweb/server.hpp"
 #include "bmcweb/webassets.hpp"
 #include "bmcweb/hardware/sensor.hpp"
 #include "bmcweb/config/config.hpp"
+#include "bmcweb/config/yaml_config.hpp"
 #include "bmcweb/user/user.hpp"
 #include "bmcweb/streaming/streamer.hpp"
 
@@ -28,89 +30,51 @@ using namespace embed::bmcweb::http;
 
 int main(int argc, char* argv[])
 {
-    // Initialize configuration first
-    auto& configManager = embed::bmcweb::config::ConfigManager::getInstance();
-    
-    // Parse command-line arguments (these override config file)
-    bool use_ssl = false;
-    std::string cert_file;
-    std::string key_file;
-    unsigned short port = 0; // 0 means use config value
-    bool use_real_hardware = true;
-    std::string log_level_str = ""; // empty means use config value
-    
+    // Parse command-line arguments (only --config for config file override)
+    std::string config_file_override;
     for (int i = 1; i < argc; i++)
     {
         std::string arg = argv[i];
-        if (arg == "--ssl" || arg == "-s")
+        if (arg == "--config" && i + 1 < argc)
         {
-            use_ssl = true;
-        }
-        else if (arg == "--cert" && i + 1 < argc)
-        {
-            cert_file = argv[++i];
-        }
-        else if (arg == "--key" && i + 1 < argc)
-        {
-            key_file = argv[++i];
-        }
-        else if (arg == "--port" && i + 1 < argc)
-        {
-            port = std::stoi(argv[++i]);
-        }
-        else if (arg == "--mock-hardware")
-        {
-            use_real_hardware = false;
-        }
-        else if (arg == "--log-level" && i + 1 < argc)
-        {
-            log_level_str = argv[++i];
+            config_file_override = argv[++i];
+            break;
         }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
-                      << "  --ssl, -s           Enable SSL/TLS (overrides config)\n"
-                      << "  --cert <file>       SSL certificate file path\n"
-                      << "  --key <file>        SSL private key file path\n"
-                      << "  --port <port>       Server port (overrides config)\n"
-                      << "  --mock-hardware     Use mock hardware data (overrides config)\n"
-                      << "  --log-level <level>  Set log level (overrides config)\n"
-                      << "  --help, -h          Show this help message\n";
+                      << "  --config <file>     Path to config.yml (default: ./config.yml)\n"
+                      << "  --help, -h          Show this help message\n"
+                      << "\n"
+                      << "Note: All settings are configured via config.yml\n"
+                      << "      Use the HTTP API /api/config to modify settings at runtime\n";
             return 0;
         }
     }
     
-    // Read configuration values (use config unless overridden by command line)
-    if (port == 0)
+    // Load YAML configuration
+    embed::bmcweb::config::AppConfig appConfig;
+    std::string configPath = config_file_override.empty() ? 
+        embed::bmcweb::config::YamlConfigLoader::getDefaultConfigPath() : 
+        config_file_override;
+    
+    if (!embed::bmcweb::config::YamlConfigLoader::load(configPath, appConfig))
     {
-        port = configManager.getInt("network.port", 8080);
+        std::cerr << "Warning: Could not load config from " << configPath << ", using defaults\n";
     }
     
-    if (use_ssl)
-    {
-        port = configManager.getInt("network.ssl_port", 8443);
-    }
-    else
-    {
-        use_ssl = configManager.getBool("network.enable_ssl", false);
-    }
-    
-    if (log_level_str.empty())
-    {
-        log_level_str = configManager.getString("system.log_level", "info");
-    }
-    
-    if (use_real_hardware)
-    {
-        // Check if config specifies mock hardware
-        // For now, we keep the command line override
-    }
+    // Use config values directly (no command-line overrides)
+    bool use_ssl = appConfig.server.enable_ssl;
+    std::string cert_file = appConfig.server.ssl_cert_file;
+    std::string key_file = appConfig.server.ssl_key_file;
+    unsigned short port = appConfig.server.port;
+    std::string log_level_str = appConfig.server.log_level;
     
     if (use_ssl && (cert_file.empty() || key_file.empty()))
     {
-        std::cerr << "Error: SSL enabled but cert or key file not provided\n";
-        std::cerr << "Use --cert and --key to specify certificate and key files\n";
+        std::cerr << "Error: SSL enabled but cert or key file not provided in config\n";
+        std::cerr << "Set ssl_cert_file and ssl_key_file in config.yml server section\n";
         return 1;
     }
     
@@ -141,42 +105,37 @@ int main(int argc, char* argv[])
     LOG_INFO("==========================================");
     LOG_INFO("Jetson BMCweb - Minimal Implementation");
     LOG_INFO("==========================================");
-    LOG_INFO("Configuration loaded from: {}", configManager.getConfigPath());
+    LOG_INFO("Configuration loaded from: {}", configPath);
     LOG_INFO("Using port: {} (SSL: {})", port, use_ssl);
     LOG_INFO("Log level: {}", log_level_str);
-    LOG_INFO("Hardware mode: {}", use_real_hardware ? "Real" : "Mock");
+    LOG_INFO("Hardware mode: {}", appConfig.hardware.mode);
 
     // Initialize hardware sensor reader with config values
     LOG_INFO("Initializing hardware sensor reader");
     auto& sensorReader = embed::bmcweb::hardware::SensorReader::getInstance();
-    sensorReader.setUseRealHardware(use_real_hardware);
+    sensorReader.setUseRealHardware(appConfig.hardware.mode == "real");
     
-    // Apply hardware configuration
-    int sensorInterval = configManager.getInt("hardware.sensor_update_interval", 1000);
-    int tempWarning = configManager.getInt("hardware.temperature_threshold_warning", 70);
-    int tempCritical = configManager.getInt("hardware.temperature_threshold_critical", 85);
-    int powerWarning = configManager.getInt("hardware.power_threshold_warning", 20);
-    int powerCritical = configManager.getInt("hardware.power_threshold_critical", 25);
-    
-    sensorReader.setUpdateInterval(sensorInterval);
-    sensorReader.setTemperatureThresholds(tempWarning, tempCritical);
-    sensorReader.setPowerThresholds(powerWarning, powerCritical);
+    // Apply hardware configuration from YAML
+    sensorReader.setUpdateInterval(appConfig.hardware.sensor_update_interval);
+    sensorReader.setTemperatureThresholds(appConfig.hardware.temp_warning, appConfig.hardware.temp_critical);
+    sensorReader.setPowerThresholds(appConfig.hardware.power_warning, appConfig.hardware.power_critical);
     
     LOG_INFO("Hardware config - sensor interval: {}ms, temp thresholds: {}/{}, power thresholds: {}/{}", 
-             sensorInterval, tempWarning, tempCritical, powerWarning, powerCritical);
+             appConfig.hardware.sensor_update_interval, appConfig.hardware.temp_warning, 
+             appConfig.hardware.temp_critical, appConfig.hardware.power_warning, appConfig.hardware.power_critical);
 
     // Initialize streaming service with config values
     LOG_INFO("Initializing streaming service");
     auto& streamer = embed::bmcweb::streaming::VideoStreamer::getInstance();
     
-    // Apply streaming configuration
-    auto streamingConfig = configManager.getStreamingConfig();
+    // Apply streaming configuration from YAML
+    std::map<std::string, std::string> streamingConfig;
+    streamingConfig["max_streams"] = std::to_string(appConfig.streaming.max_streams);
+    streamingConfig["default_protocol"] = appConfig.streaming.default_protocol;
+    streamingConfig["auto_detect_cameras"] = appConfig.streaming.auto_detect_cameras ? "true" : "false";
     streamer.applyConfiguration(streamingConfig);
     
-    bool streamingEnabled = configManager.getBool("streaming.enable", true);
-    int maxStreams = configManager.getInt("streaming.max_streams", 10);
-    
-    LOG_INFO("Streaming config - enabled: {}, max streams: {}", streamingEnabled, maxStreams);
+    LOG_INFO("Streaming config - enabled: {}, max streams: {}", appConfig.streaming.enable, appConfig.streaming.max_streams);
 
     // Create application
     LOG_INFO("Creating application instance");
@@ -207,6 +166,10 @@ int main(int argc, char* argv[])
     // Register configuration routes
     LOG_INFO("Registering configuration routes");
     embed::bmcweb::routes::registerConfigRoutes(app);
+    
+    // Register configuration API routes (for runtime config modification)
+    LOG_INFO("Registering configuration API routes");
+    embed::bmcweb::routes::registerConfigAPIRoutes(app, appConfig);
 
     // Register user management routes
     LOG_INFO("Registering user management routes");
@@ -238,6 +201,57 @@ int main(int argc, char* argv[])
     app.validate();
 
     LOG_INFO("Routes validated successfully");
+    
+    // Configure streams from YAML configuration
+    LOG_INFO("Configuring streams from config file");
+    for (const auto& streamConfig : appConfig.streaming.streams)
+    {
+        if (!streamConfig.enabled)
+        {
+            LOG_INFO("Skipping disabled stream: {}", streamConfig.id);
+            continue;
+        }
+        
+        LOG_INFO("Configuring stream: {} from: {}", streamConfig.id, streamConfig.source_path);
+        
+        embed::bmcweb::streaming::StreamConfig stream;
+        stream.id = streamConfig.id;
+        stream.name = streamConfig.name;
+        
+        // Map string type to enum
+        if (streamConfig.type == "mp4_file")
+            stream.type = embed::bmcweb::streaming::StreamSourceType::MP4_FILE;
+        else if (streamConfig.type == "camera_device")
+            stream.type = embed::bmcweb::streaming::StreamSourceType::CAMERA_DEVICE;
+        else if (streamConfig.type == "network_stream")
+            stream.type = embed::bmcweb::streaming::StreamSourceType::NETWORK_STREAM;
+        else
+            stream.type = embed::bmcweb::streaming::StreamSourceType::MP4_FILE; // Default to MP4
+        
+        stream.sourcePath = streamConfig.source_path;
+        
+        // Map string protocol to enum
+        if (streamConfig.protocol == "mjpeg")
+            stream.protocol = embed::bmcweb::streaming::StreamProtocol::MJPEG;
+        else if (streamConfig.protocol == "rtsp")
+            stream.protocol = embed::bmcweb::streaming::StreamProtocol::RTSP;
+        else if (streamConfig.protocol == "webrtc")
+            stream.protocol = embed::bmcweb::streaming::StreamProtocol::WEBRTC;
+        else if (streamConfig.protocol == "hls")
+            stream.protocol = embed::bmcweb::streaming::StreamProtocol::HLS;
+        else
+            stream.protocol = embed::bmcweb::streaming::StreamProtocol::MJPEG;
+        
+        stream.enabled = streamConfig.enabled;
+        stream.loop = streamConfig.loop;
+        stream.quality = streamConfig.quality;
+        
+        // Just add stream metadata without initializing frame source (lazy initialization)
+        auto& streamer = embed::bmcweb::streaming::VideoStreamer::getInstance();
+        streamer.addStreamMetadata(stream);
+        LOG_INFO("Stream metadata configured: {}", streamConfig.id);
+    }
+    
     LOG_INFO("Starting HTTP server on port {} (SSL: {})...", port, use_ssl);
 
     // Start HTTP server

@@ -66,13 +66,22 @@ target_link_libraries(jetson_tests PRIVATE
     GTest::gtest_main
     Boost::system
     Boost::filesystem
-    Boost::iostreams
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     pthread
     OpenSSL::SSL
     OpenSSL::Crypto
 )
+
+# Link FFmpeg if streaming is enabled and FFmpeg was found
+if(JETSON_ENABLE_STREAMING AND FFMPEG_FOUND)
+    target_link_libraries(jetson_tests PRIVATE ${FFMPEG_LIBRARIES})
+    target_include_directories(jetson_tests PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(jetson_tests PRIVATE ${FFMPEG_CFLAGS_OTHER})
+    target_compile_definitions(jetson_tests PRIVATE JETSON_ENABLE_STREAMING=1)
+elseif(JETSON_ENABLE_STREAMING)
+    message(WARNING "Streaming enabled but FFmpeg not found, using fallback mode")
+endif()
 
 # Register tests
 add_test(NAME routing_test COMMAND jetson_tests --gtest_filter=RoutingTest.*)

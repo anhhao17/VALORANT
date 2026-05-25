@@ -56,3 +56,51 @@ TEST_F(RoutingTest, RouteValidation)
     // Should not throw during validation
     EXPECT_NO_THROW(app->validate());
 }
+
+TEST_F(RoutingTest, WildcardRouteRegistration)
+{
+    bool handlerCalled = false;
+    std::string capturedParam;
+    
+    app->route<>("/api/streams/*/start")
+        .setHandler([&handlerCalled, &capturedParam](const Request&, const std::shared_ptr<AsyncResp>&) {
+            handlerCalled = true;
+            capturedParam = "test_stream";
+        });
+    
+    app->validate();
+    EXPECT_FALSE(handlerCalled); // Handler not called during registration
+}
+
+TEST_F(RoutingTest, WildcardRouteWithDifferentPatterns)
+{
+    int callCount = 0;
+    
+    // Register multiple wildcard routes
+    app->route<>("/api/streams/*/start")
+        .setHandler([&callCount](const Request&, const std::shared_ptr<AsyncResp>&) {
+            callCount++;
+        });
+    
+    app->route<>("/api/streams/*/stop")
+        .setHandler([&callCount](const Request&, const std::shared_ptr<AsyncResp>&) {
+            callCount++;
+        });
+    
+    app->route<>("/api/users/*/enable")
+        .setHandler([&callCount](const Request&, const std::shared_ptr<AsyncResp>&) {
+            callCount++;
+        });
+    
+    app->validate();
+    EXPECT_EQ(callCount, 0); // Handlers not called during registration
+}
+
+TEST_F(RoutingTest, WildcardRouteValidation)
+{
+    app->route<>("/api/streams/*/status")
+        .setHandler([](const Request&, const std::shared_ptr<AsyncResp>&) {});
+    
+    // Should not throw during validation
+    EXPECT_NO_THROW(app->validate());
+}

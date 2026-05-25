@@ -6,7 +6,9 @@ namespace embed::bmcweb::streaming
 
 bool ProtocolManager::setProtocol(const std::string& streamId, StreamProtocol protocol)
 {
+    LOG_INFO("setProtocol: Attempting to lock mutex for stream: {}", streamId);
     std::lock_guard<std::mutex> lock(mutex_);
+    LOG_INFO("setProtocol: Mutex locked for stream: {}", streamId);
     
     // Only allow protocol change if not locked
     auto lockedIt = protocolLocked_.find(streamId);
@@ -25,28 +27,42 @@ bool ProtocolManager::setProtocol(const std::string& streamId, StreamProtocol pr
 
 StreamProtocol ProtocolManager::getProtocol(const std::string& streamId) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = activeProtocols_.find(streamId);
-    if (it != activeProtocols_.end())
+    // Use try_lock to avoid deadlock during initialization
+    if (mutex_.try_lock())
     {
-        return it->second;
+        std::lock_guard<std::mutex> lock(mutex_, std::adopt_lock);
+        
+        auto it = activeProtocols_.find(streamId);
+        if (it != activeProtocols_.end())
+        {
+            return it->second;
+        }
+        
+        // Return default protocol if not set
+        return StreamProtocol::MJPEG;
     }
     
-    // Return default protocol if not set
+    // If mutex is locked (initialization in progress), return default protocol
     return StreamProtocol::MJPEG;
 }
 
 bool ProtocolManager::isLocked(const std::string& streamId) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    auto it = protocolLocked_.find(streamId);
-    if (it != protocolLocked_.end())
+    // Use try_lock to avoid deadlock during initialization
+    if (mutex_.try_lock())
     {
-        return it->second;
+        std::lock_guard<std::mutex> lock(mutex_, std::adopt_lock);
+        
+        auto it = protocolLocked_.find(streamId);
+        if (it != protocolLocked_.end())
+        {
+            return it->second;
+        }
+        
+        return false;
     }
     
+    // If mutex is locked (initialization in progress), return false
     return false;
 }
 
@@ -89,25 +105,33 @@ bool ProtocolManager::unlockProtocol(const std::string& streamId)
 
 bool ProtocolManager::createProtocolInstance(const std::string& streamId, const StreamConfig& config)
 {
+    LOG_INFO("createProtocolInstance: Attempting to lock mutex for stream: {}", streamId);
     std::lock_guard<std::mutex> lock(mutex_);
+    LOG_INFO("createProtocolInstance: Mutex locked for stream: {}", streamId);
+    
+    LOG_INFO("Creating protocol instance for stream: {}", streamId);
     
     // Remove existing instance if present
     removeProtocolInstance(streamId);
     
     // Create new protocol instance using factory
+    LOG_INFO("Creating protocol using factory for protocol type: {}", static_cast<int>(config.protocol));
     auto protocol = ProtocolFactory::createProtocol(config.protocol);
     if (!protocol)
     {
         LOG_ERROR("Failed to create protocol instance for stream: {}", streamId);
         return false;
     }
+    LOG_INFO("Protocol created successfully");
     
     // Initialize protocol with config
+    LOG_INFO("Initializing protocol for stream: {}", streamId);
     if (!protocol->initialize(config))
     {
         LOG_ERROR("Failed to initialize protocol for stream: {}", streamId);
         return false;
     }
+    LOG_INFO("Protocol initialized successfully");
     
     protocolInstances_[streamId] = std::move(protocol);
     

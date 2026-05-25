@@ -10,6 +10,15 @@
 #include <chrono>
 #include <fstream>
 
+#ifdef JETSON_ENABLE_STREAMING
+extern "C" {
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVFrame;
+struct SwsContext;
+}
+#endif
+
 namespace embed::bmcweb::streaming
 {
 
@@ -58,10 +67,21 @@ private:
     std::thread captureThread_;
     std::atomic<bool> shouldStop_;
     
-    // File data
+    // File data (legacy, for fallback)
     std::vector<uint8_t> fileData_;
     int64_t fileDuration_;
     int64_t currentPosition_;
+    
+#ifdef JETSON_ENABLE_STREAMING
+    // FFmpeg contexts
+    AVFormatContext* formatContext_;
+    AVCodecContext* codecContext_;
+    int videoStreamIndex_;
+    SwsContext* swsContext_;
+    AVFrame* frame_;
+    AVFrame* rgbFrame_;
+    bool ffmpegInitialized_;
+#endif
     
     // Statistics
     uint64_t framesGenerated_;
@@ -74,6 +94,11 @@ private:
     bool loadVideoFile();
     VideoFrame extractFrame(int64_t timestamp);
     int64_t calculateDuration() const;
+#ifdef JETSON_ENABLE_STREAMING
+    bool loadVideoFileFFmpeg();
+    bool convertFrameToRGB();
+    void cleanupFFmpeg();
+#endif
 };
 
 } // namespace embed::bmcweb::streaming

@@ -3,6 +3,7 @@
 #include "../logging.hpp"
 #include "../user/user.hpp"
 #include <boost/beast/http/field.hpp>
+#include <boost/beast/http/verb.hpp>
 
 namespace embed::bmcweb::routes
 {
@@ -44,7 +45,27 @@ void registerAuthRoutes(App& app)
     JETSON_ROUTE(app, "/api/login")
         .setHandler([](const Request& req,
                       const std::shared_ptr<AsyncResp>& asyncResp) {
-            LOG_INFO("Login endpoint called");
+            LOG_INFO("Login endpoint called, method: {}", static_cast<int>(req.method()));
+
+            // Handle OPTIONS preflight request
+            if (req.method() == boost::beast::http::verb::options)
+            {
+                LOG_DEBUG("Handling OPTIONS preflight request");
+                asyncResp->res.result(status::ok);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{}");
+                return;
+            }
+
+            // Only accept POST requests
+            if (req.method() != boost::beast::http::verb::post)
+            {
+                LOG_WARN("Invalid method for login endpoint: {}", static_cast<int>(req.method()));
+                asyncResp->res.result(status::method_not_allowed);
+                asyncResp->res.set(field::content_type, "application/json");
+                asyncResp->res.body("{\"error\":\"Method not allowed\"}");
+                return;
+            }
 
             try
             {

@@ -15,14 +15,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 
-# Find dependencies
-find_package(Boost 1.83 REQUIRED COMPONENTS system filesystem)
-find_package(nlohmann_json 3.11 REQUIRED)
-find_package(OpenSSL REQUIRED)
-find_package(spdlog 1.10 REQUIRED)
+# Include dependency management
+include(cmake/Dependencies.cmake)
 
-# Add additional Boost components needed for Beast
-find_package(Boost 1.83 REQUIRED COMPONENTS iostreams)
+# Enable streaming
+option(JETSON_ENABLE_STREAMING "Enable streaming support" ON)
 
 # Enable testing
 option(BUILD_TESTS "Build tests" ON)
@@ -45,10 +42,12 @@ add_executable(jetson
     src/bmcweb/routes/auth.cpp
     src/bmcweb/routes/websocket.cpp
     src/bmcweb/routes/config.cpp
+    src/bmcweb/routes/config_api.cpp
     src/bmcweb/routes/users.cpp
     src/bmcweb/routes/streaming_routes.cpp
     src/bmcweb/hardware/sensor.cpp
     src/bmcweb/config/config.cpp
+    src/bmcweb/config/yaml_config.cpp
     src/bmcweb/user/user.cpp
     src/bmcweb/streaming/streamer.cpp
     src/bmcweb/streaming/recording_manager.cpp
@@ -76,10 +75,20 @@ target_include_directories(jetson PRIVATE
 target_link_libraries(jetson PRIVATE
     Boost::system
     Boost::filesystem
-    Boost::iostreams
     nlohmann_json::nlohmann_json
     OpenSSL::SSL
     OpenSSL::Crypto
     spdlog::spdlog
+    yaml-cpp::yaml-cpp
     pthread
 )
+
+# Link FFmpeg if streaming is enabled and FFmpeg was found
+if(JETSON_ENABLE_STREAMING AND FFMPEG_FOUND)
+    target_link_libraries(jetson PRIVATE ${FFMPEG_LIBRARIES})
+    target_include_directories(jetson PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(jetson PRIVATE ${FFMPEG_CFLAGS_OTHER})
+    target_compile_definitions(jetson PRIVATE JETSON_ENABLE_STREAMING=1)
+elseif(JETSON_ENABLE_STREAMING)
+    message(WARNING "Streaming enabled but FFmpeg not found, using fallback mode")
+endif()

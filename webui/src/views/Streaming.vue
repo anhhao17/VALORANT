@@ -2,9 +2,7 @@
   <div class="streaming-page">
     <div class="page-header">
       <h1>Streaming Management</h1>
-      <button @click="showCreateModal = true" class="btn btn-primary">
-        <i class="icon">+</i> Add Stream
-      </button>
+      <p class="page-subtitle">Server-configured streams - start/stop available streams</p>
     </div>
 
     <div class="streams-grid">
@@ -31,16 +29,16 @@
             <span class="value">{{ getStreamTypeLabel(stream.type) }}</span>
           </div>
           <div class="info-row">
-            <span class="label">Source:</span>
-            <span class="value">{{ stream.sourcePath }}</span>
+            <span class="label">Protocol:</span>
+            <span class="value">{{ getProtocolLabel(stream.protocol) }}</span>
           </div>
           <div class="info-row">
             <span class="label">Quality:</span>
             <span class="value">{{ stream.quality }}%</span>
           </div>
-          <div class="info-row" v-if="stream.type !== 0">
-            <span class="label">Recording:</span>
-            <span class="value">{{ stream.supportsRecording ? 'Supported' : 'Not Supported' }}</span>
+          <div class="info-row" v-if="stream.type === 0">
+            <span class="label">Loop:</span>
+            <span class="value">{{ stream.loop ? 'Enabled' : 'Disabled' }}</span>
           </div>
         </div>
         
@@ -53,105 +51,13 @@
             <i class="icon">📊</i>
             Stats
           </button>
-          <button @click="editStream(stream)" class="btn btn-secondary">
-            <i class="icon">✎</i>
-            Edit
-          </button>
-          <button @click="deleteStream(stream)" class="btn btn-danger">
-            <i class="icon">✕</i>
-            Delete
-          </button>
         </div>
       </div>
     </div>
 
-    <!-- Create Stream Modal -->
-    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Add Stream</h2>
-          <button @click="showCreateModal = false" class="btn-close">×</button>
-        </div>
-        <div class="modal-body">
-          <form @submit.prevent="createStream">
-            <div class="form-group">
-              <label>Stream ID</label>
-              <input v-model="newStream.id" type="text" required placeholder="e.g., camera_1" />
-            </div>
-            <div class="form-group">
-              <label>Name</label>
-              <input v-model="newStream.name" type="text" placeholder="e.g., Main Camera" />
-            </div>
-            <div class="form-group">
-              <label>Type</label>
-              <select v-model="newStream.type" required @change="handleTypeChange">
-                <option value="0">MP4 File</option>
-                <option value="1">Camera Device</option>
-                <option value="2">Network Stream</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Source Path</label>
-              <input v-model="newStream.sourcePath" type="text" required 
-                     :placeholder="getSourcePathPlaceholder(newStream.type)" />
-            </div>
-            <div class="form-group">
-              <label>Quality (1-100)</label>
-              <input v-model="newStream.quality" type="number" min="1" max="100" value="80" />
-            </div>
-            <div class="form-group" v-if="newStream.type == 0">
-              <label>
-                <input type="checkbox" v-model="newStream.loop" />
-                Loop playback
-              </label>
-            </div>
-            <div class="form-actions">
-              <button type="button" @click="showCreateModal = false" class="btn btn-secondary">Cancel</button>
-              <button type="submit" class="btn btn-primary">Create</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- Edit Stream Modal -->
-    <div v-if="showEditModal" class="modal-overlay" @click.self="showEditModal = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Edit Stream</h2>
-          <button @click="showEditModal = false" class="btn-close">×</button>
-        </div>
-        <div class="modal-body">
-          <form @submit.prevent="updateStream">
-            <div class="form-group">
-              <label>Stream ID</label>
-              <input v-model="editingStream.id" type="text" disabled />
-            </div>
-            <div class="form-group">
-              <label>Name</label>
-              <input v-model="editingStream.name" type="text" />
-            </div>
-            <div class="form-group">
-              <label>Source Path</label>
-              <input v-model="editingStream.sourcePath" type="text" />
-            </div>
-            <div class="form-group">
-              <label>Quality (1-100)</label>
-              <input v-model="editingStream.quality" type="number" min="1" max="100" />
-            </div>
-            <div class="form-group" v-if="editingStream.type == 0">
-              <label>
-                <input type="checkbox" v-model="editingStream.loop" />
-                Loop playback
-              </label>
-            </div>
-            <div class="form-actions">
-              <button type="button" @click="showEditModal = false" class="btn btn-secondary">Cancel</button>
-              <button type="submit" class="btn btn-primary">Save</button>
-            </div>
-          </form>
-        </div>
-      </div>
+    <div v-if="streams.length === 0" class="no-streams">
+      <p>No streams configured. Configure streams via server command line.</p>
+      <code>./jetson --video-file /path/to/video.mp4 --camera /dev/video0</code>
     </div>
 
     <!-- Statistics Modal -->
@@ -216,27 +122,7 @@ const streams = ref([])
 const statistics = ref(null)
 const statsStream = ref(null)
 
-const showCreateModal = ref(false)
-const showEditModal = ref(false)
 const showStatsModal = ref(false)
-
-const newStream = ref({
-  id: '',
-  name: '',
-  type: 0,
-  sourcePath: '',
-  quality: 80,
-  loop: true
-})
-
-const editingStream = ref({
-  id: '',
-  name: '',
-  sourcePath: '',
-  quality: 80,
-  loop: true,
-  type: 0
-})
 
 const loadStreams = async () => {
   try {
@@ -253,110 +139,6 @@ const loadStreams = async () => {
     }
   } catch (error) {
     console.error('Error loading streams:', error)
-  }
-}
-
-const createStream = async () => {
-  // Validate required fields
-  if (!newStream.value.id || !newStream.value.sourcePath) {
-    alert('Stream ID and Source Path are required')
-    return
-  }
-  
-  try {
-    const response = await fetch('/api/streams', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${authStore.sessionToken}`
-      },
-      body: JSON.stringify({
-        id: newStream.value.id,
-        name: newStream.value.name,
-        type: parseInt(newStream.value.type),
-        sourcePath: newStream.value.sourcePath,
-        quality: newStream.value.quality,
-        loop: newStream.value.loop
-      })
-    })
-    
-    if (response.ok) {
-      showCreateModal.value = false
-      newStream.value = { id: '', name: '', type: 0, sourcePath: '', quality: 80, loop: true }
-      await loadStreams()
-    } else {
-      const error = await response.json()
-      alert(error.error || 'Failed to create stream')
-    }
-  } catch (error) {
-    console.error('Error creating stream:', error)
-    alert('Failed to create stream')
-  }
-}
-
-const editStream = (stream) => {
-  editingStream.value = {
-    id: stream.id,
-    name: stream.name,
-    sourcePath: stream.sourcePath,
-    quality: stream.quality,
-    loop: stream.loop,
-    type: stream.type
-  }
-  showEditModal.value = true
-}
-
-const updateStream = async () => {
-  try {
-    const response = await fetch(`/api/streams/${editingStream.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${authStore.sessionToken}`
-      },
-      body: JSON.stringify({
-        name: editingStream.value.name,
-        sourcePath: editingStream.value.sourcePath,
-        quality: editingStream.value.quality,
-        loop: editingStream.value.loop
-      })
-    })
-    
-    if (response.ok) {
-      showEditModal.value = false
-      await loadStreams()
-    } else {
-      const error = await response.json()
-      alert(error.error || 'Failed to update stream')
-    }
-  } catch (error) {
-    console.error('Error updating stream:', error)
-    alert('Failed to update stream')
-  }
-}
-
-const deleteStream = async (stream) => {
-  if (!confirm(`Are you sure you want to delete stream ${stream.id}?`)) {
-    return
-  }
-  
-  try {
-    const response = await fetch(`/api/streams/${stream.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Token ${authStore.sessionToken}`
-      }
-    })
-    
-    if (response.ok) {
-      await loadStreams()
-    } else {
-      const error = await response.json()
-      alert(error.error || 'Failed to delete stream')
-    }
-  } catch (error) {
-    console.error('Error deleting stream:', error)
-    alert('Failed to delete stream')
   }
 }
 
@@ -449,17 +231,15 @@ const getStreamTypeLabel = (type) => {
   return types[type] || 'Unknown'
 }
 
-const getSourcePathPlaceholder = (type) => {
-  const placeholders = {
-    0: '/path/to/video.mp4',
-    1: '/dev/video0',
-    2: 'rtsp://camera-ip/stream'
+const getProtocolLabel = (protocol) => {
+  const protocols = {
+    0: 'MJPEG',
+    1: 'UDP/RTP',
+    2: 'RTSP',
+    3: 'WebRTC',
+    4: 'HLS'
   }
-  return placeholders[type] || ''
-}
-
-const handleTypeChange = () => {
-  newStream.value.sourcePath = ''
+  return protocols[protocol] || 'Unknown'
 }
 
 const formatBytes = (bytes) => {
@@ -503,6 +283,12 @@ onMounted(() => {
 .page-header h1 {
   margin: 0;
   color: #333;
+}
+
+.page-subtitle {
+  margin: 0.5rem 0 0 0;
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .streams-grid {
@@ -777,5 +563,23 @@ onMounted(() => {
   text-align: center;
   color: #666;
   padding: 2rem;
+}
+
+.no-streams {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.no-streams p {
+  margin-bottom: 1rem;
+}
+
+.no-streams code {
+  background: #f8f9fa;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-family: monospace;
+  color: #333;
 }
 </style>

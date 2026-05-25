@@ -4,6 +4,16 @@
 #include <filesystem>
 #include <cstring>
 
+#ifdef JETSON_ENABLE_STREAMING
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/avutil.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+}
+#endif
+
 namespace embed::bmcweb::streaming
 {
 
@@ -13,6 +23,15 @@ FileCapture::FileCapture()
     , shouldStop_(false)
     , fileDuration_(0)
     , currentPosition_(0)
+#ifdef JETSON_ENABLE_STREAMING
+    , formatContext_(nullptr)
+    , codecContext_(nullptr)
+    , videoStreamIndex_(-1)
+    , swsContext_(nullptr)
+    , frame_(nullptr)
+    , rgbFrame_(nullptr)
+    , ffmpegInitialized_(false)
+#endif
     , framesGenerated_(0)
     , bytesGenerated_(0)
     , startTime_(0)
@@ -26,6 +45,7 @@ FileCapture::~FileCapture()
 
 bool FileCapture::initialize(const FrameSourceConfig& config)
 {
+    LOG_INFO("FileCapture::initialize called for: {}", config.sourcePath);
     std::lock_guard<std::mutex> lock(mutex_);
     
     config_ = config;
@@ -43,6 +63,7 @@ bool FileCapture::initialize(const FrameSourceConfig& config)
     bytesGenerated_ = 0;
     startTime_ = 0;
     
+    LOG_INFO("Loading video file: {}", config_.sourcePath);
     // Load video file
     if (!loadVideoFile())
     {
@@ -220,6 +241,10 @@ void FileCapture::cleanup()
 {
     stopCapture();
     
+#ifdef JETSON_ENABLE_STREAMING
+    cleanupFFmpeg();
+#endif
+    
     std::lock_guard<std::mutex> lock(mutex_);
     fileData_.clear();
     framesGenerated_ = 0;
@@ -254,48 +279,147 @@ void FileCapture::captureLoop()
 {
     const auto frameDuration = std::chrono::milliseconds(1000 / config_.frameRate);
     
-    while (!shouldStop_)
+#ifdef JETSON_ENABLE_STREAMING
+    if (ffmpegInitialized_ && formatContext_)
     {
-        auto frameStart = std::chrono::steady_clock::now();
+        // FFmpeg mode: read frames sequentially from the video file
+        AVPacket* packet = av_packet_alloc();
+        AVFrame* decodedFrame = av_frame_alloc();
         
-        // Generate frame
-        VideoFrame frame = generateFrame();
-        
-        // Update statistics
-        framesGenerated_++;
-        bytesGenerated_ += frame.data.size();
-        currentPosition_ += (1000 / config_.frameRate);
-        
-        // Handle looping
-        if (currentPosition_ >= fileDuration_ && fileDuration_ > 0)
+        while (!shouldStop_)
         {
-            if (looping_)
+            auto frameStart = std::chrono::steady_clock::now();
+            
+            // Read packet from file
+            int ret = av_read_frame(formatContext_, packet);
+            if (ret < 0)
             {
-                currentPosition_ = 0;
-                LOG_INFO("FileCapture looping to start");
+                // End of file or error
+                if (looping_)
+                {
+                    // Seek back to start
+                    av_seek_frame(formatContext_, -1, 0, AVSEEK_FLAG_BACKWARD);
+                    currentPosition_ = 0;
+                    LOG_INFO("FileCapture looping to start");
+                    continue;
+                }
+                else
+                {
+                    LOG_INFO("FileCapture reached end of file");
+                    break;
+                }
             }
-            else
+            
+            // Only process video packets
+            if (packet->stream_index == videoStreamIndex_)
             {
-                LOG_INFO("FileCapture reached end of file");
-                break;
+                // Send packet to decoder
+                ret = avcodec_send_packet(codecContext_, packet);
+                if (ret == 0)
+                {
+                    // Receive frame from decoder
+                    ret = avcodec_receive_frame(codecContext_, decodedFrame);
+                    if (ret == 0)
+                    {
+                        // Convert decoded frame to RGB
+                        frame_ = decodedFrame;
+                        if (convertFrameToRGB())
+                        {
+                            // Create video frame
+                            VideoFrame frame;
+                            frame.width = config_.width;
+                            frame.height = config_.height;
+                            frame.timestamp = currentPosition_;
+                            frame.codec = config_.pixelFormat;
+                            
+                            // Copy frame data
+                            size_t frameSize = config_.width * config_.height * 3;
+                            frame.data.resize(frameSize);
+                            
+                            if (rgbFrame_ && rgbFrame_->data[0])
+                            {
+                                std::memcpy(frame.data.data(), rgbFrame_->data[0], frameSize);
+                                
+                                // Update statistics
+                                framesGenerated_++;
+                                bytesGenerated_ += frame.data.size();
+                                currentPosition_ += (1000 / config_.frameRate);
+                                
+                                // Deliver frame via callback
+                                if (frameCallback_)
+                                {
+                                    frameCallback_(frame);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            av_packet_unref(packet);
+            
+            // Maintain frame rate
+            auto frameEnd = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+            
+            if (elapsed < frameDuration)
+            {
+                std::this_thread::sleep_for(frameDuration - elapsed);
             }
         }
         
-        // Deliver frame via callback
-        if (frameCallback_)
-        {
-            frameCallback_(frame);
-        }
-        
-        // Maintain frame rate
-        auto frameEnd = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
-        
-        if (elapsed < frameDuration)
-        {
-            std::this_thread::sleep_for(frameDuration - elapsed);
-        }
+        av_packet_free(&packet);
+        av_frame_free(&decodedFrame);
     }
+    else
+    {
+#endif
+        // Legacy mode: generate placeholder frames
+        while (!shouldStop_)
+        {
+            auto frameStart = std::chrono::steady_clock::now();
+            
+            // Generate frame
+            VideoFrame frame = generateFrame();
+            
+            // Update statistics
+            framesGenerated_++;
+            bytesGenerated_ += frame.data.size();
+            currentPosition_ += (1000 / config_.frameRate);
+            
+            // Handle looping
+            if (currentPosition_ >= fileDuration_ && fileDuration_ > 0)
+            {
+                if (looping_)
+                {
+                    currentPosition_ = 0;
+                    LOG_INFO("FileCapture looping to start");
+                }
+                else
+                {
+                    LOG_INFO("FileCapture reached end of file");
+                    break;
+                }
+            }
+            
+            // Deliver frame via callback
+            if (frameCallback_)
+            {
+                frameCallback_(frame);
+            }
+            
+            // Maintain frame rate
+            auto frameEnd = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+            
+            if (elapsed < frameDuration)
+            {
+                std::this_thread::sleep_for(frameDuration - elapsed);
+            }
+        }
+#ifdef JETSON_ENABLE_STREAMING
+    }
+#endif
     
     capturing_ = false;
 }
@@ -315,12 +439,21 @@ bool FileCapture::loadVideoFile()
         return false;
     }
     
-    // Get file size
-    uintmax_t fileSize = std::filesystem::file_size(config_.sourcePath);
+#ifdef JETSON_ENABLE_STREAMING
+    // Try to load with FFmpeg first
+    if (loadVideoFileFFmpeg())
+    {
+        LOG_INFO("Video file loaded with FFmpeg: {}", config_.sourcePath);
+        return true;
+    }
+    else
+    {
+        LOG_WARN("FFmpeg loading failed, falling back to legacy mode");
+    }
+#endif
     
-    // For now, we'll simulate loading the file
-    // In a real implementation, this would use FFmpeg or similar
-    // to properly decode video files
+    // Fallback to legacy mode
+    uintmax_t fileSize = std::filesystem::file_size(config_.sourcePath);
     
     fileData_.resize(fileSize);
     
@@ -335,7 +468,7 @@ bool FileCapture::loadVideoFile()
     // This is a simplified calculation
     fileDuration_ = calculateDuration();
     
-    LOG_INFO("Loaded video file: {} ({} bytes, estimated duration: {}ms)", 
+    LOG_INFO("Loaded video file (legacy mode): {} ({} bytes, estimated duration: {}ms)", 
              config_.sourcePath, fileSize, fileDuration_);
     
     return true;
@@ -343,15 +476,77 @@ bool FileCapture::loadVideoFile()
 
 VideoFrame FileCapture::extractFrame(int64_t timestamp)
 {
+#ifdef JETSON_ENABLE_STREAMING
+    if (ffmpegInitialized_ && formatContext_ && codecContext_)
+    {
+        // Use FFmpeg to decode the actual frame
+        AVPacket* packet = av_packet_alloc();
+        AVFrame* decodedFrame = av_frame_alloc();
+        
+        VideoFrame resultFrame;
+        resultFrame.width = config_.width;
+        resultFrame.height = config_.height;
+        resultFrame.timestamp = timestamp;
+        resultFrame.codec = config_.pixelFormat;
+        
+        // Seek to the approximate position
+        int64_t seekTarget = timestamp * AV_TIME_BASE / 1000; // Convert ms to AV time base
+        av_seek_frame(formatContext_, -1, seekTarget, AVSEEK_FLAG_BACKWARD);
+        
+        // Read frames until we get one at the right position
+        bool frameFound = false;
+        while (av_read_frame(formatContext_, packet) >= 0)
+        {
+            if (packet->stream_index == videoStreamIndex_)
+            {
+                // Send packet to decoder
+                int ret = avcodec_send_packet(codecContext_, packet);
+                if (ret == 0)
+                {
+                    // Receive frame from decoder
+                    ret = avcodec_receive_frame(codecContext_, decodedFrame);
+                    if (ret == 0)
+                    {
+                        // Convert decoded frame to RGB
+                        frame_ = decodedFrame; // Use the decoded frame
+                        if (convertFrameToRGB())
+                        {
+                            // Copy frame data to result
+                            size_t frameSize = config_.width * config_.height * 3;
+                            resultFrame.data.resize(frameSize);
+                            
+                            // Copy from rgbFrame_
+                            if (rgbFrame_ && rgbFrame_->data[0])
+                            {
+                                std::memcpy(resultFrame.data.data(), rgbFrame_->data[0], frameSize);
+                                frameFound = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            av_packet_unref(packet);
+            
+            if (frameFound) break;
+        }
+        
+        av_packet_free(&packet);
+        av_frame_free(&decodedFrame);
+        
+        if (frameFound)
+        {
+            return resultFrame;
+        }
+    }
+#endif
+    
+    // Fallback to placeholder frame
     VideoFrame frame;
     frame.width = config_.width;
     frame.height = config_.height;
     frame.timestamp = timestamp;
     frame.codec = config_.pixelFormat;
-    
-    // In a real implementation, this would decode the video frame
-    // at the specified timestamp using FFmpeg or similar
-    // For now, we'll create a placeholder frame
     
     size_t frameSize = config_.width * config_.height * 3; // RGB24
     frame.data.resize(frameSize, 128); // Fill with gray
@@ -370,10 +565,226 @@ VideoFrame FileCapture::extractFrame(int64_t timestamp)
 
 int64_t FileCapture::calculateDuration() const
 {
+#ifdef JETSON_ENABLE_STREAMING
+    if (ffmpegInitialized_ && formatContext_)
+    {
+        // Get actual duration from FFmpeg
+        return (formatContext_->duration * 1000) / AV_TIME_BASE; // Convert to milliseconds
+    }
+#endif
+    
     // Simplified duration calculation
     // In a real implementation, this would come from video metadata
     int64_t estimatedFrames = fileData_.size() / (config_.width * config_.height * 3);
     return (estimatedFrames * 1000) / config_.frameRate;
 }
+
+#ifdef JETSON_ENABLE_STREAMING
+bool FileCapture::loadVideoFileFFmpeg()
+{
+    LOG_INFO("Starting FFmpeg video file loading: {}", config_.sourcePath);
+    
+    // Open video file
+    LOG_INFO("Opening video file with FFmpeg...");
+    if (avformat_open_input(&formatContext_, config_.sourcePath.c_str(), nullptr, nullptr) != 0)
+    {
+        LOG_ERROR("Could not open video file: {}", config_.sourcePath);
+        return false;
+    }
+    LOG_INFO("Video file opened successfully");
+    
+    // Retrieve stream information
+    LOG_INFO("Retrieving stream information...");
+    if (avformat_find_stream_info(formatContext_, nullptr) < 0)
+    {
+        LOG_ERROR("Could not find stream information");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Stream information retrieved successfully");
+    
+    // Find the first video stream
+    LOG_INFO("Finding video stream...");
+    videoStreamIndex_ = -1;
+    for (unsigned int i = 0; i < formatContext_->nb_streams; i++)
+    {
+        if (formatContext_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+        {
+            videoStreamIndex_ = i;
+            break;
+        }
+    }
+    
+    if (videoStreamIndex_ == -1)
+    {
+        LOG_ERROR("Could not find video stream");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Video stream found at index: {}", videoStreamIndex_);
+    
+    // Get the codec
+    LOG_INFO("Finding codec...");
+    AVCodecParameters* codecPar = formatContext_->streams[videoStreamIndex_]->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
+    if (!codec)
+    {
+        LOG_ERROR("Unsupported codec");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Codec found: {}", codec->name);
+    
+    // Create codec context
+    LOG_INFO("Allocating codec context...");
+    codecContext_ = avcodec_alloc_context3(codec);
+    if (!codecContext_)
+    {
+        LOG_ERROR("Could not allocate codec context");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Codec context allocated");
+    
+    // Copy codec parameters
+    LOG_INFO("Copying codec parameters...");
+    if (avcodec_parameters_to_context(codecContext_, codecPar) < 0)
+    {
+        LOG_ERROR("Could not copy codec parameters");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Codec parameters copied");
+    
+    // Open codec
+    LOG_INFO("Opening codec...");
+    if (avcodec_open2(codecContext_, codec, nullptr) < 0)
+    {
+        LOG_ERROR("Could not open codec");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Codec opened successfully");
+    
+    // Update config with actual video properties
+    config_.width = codecContext_->width;
+    config_.height = codecContext_->height;
+    
+    // Calculate frame rate from stream
+    AVStream* videoStream = formatContext_->streams[videoStreamIndex_];
+    if (videoStream->avg_frame_rate.den > 0)
+    {
+        config_.frameRate = videoStream->avg_frame_rate.num / videoStream->avg_frame_rate.den;
+    }
+    
+    // Get duration
+    fileDuration_ = (formatContext_->duration * 1000) / AV_TIME_BASE;
+    
+    LOG_INFO("Video properties: {}x{} @ {}fps, duration: {}ms", 
+             config_.width, config_.height, config_.frameRate, fileDuration_);
+    
+    // Allocate frames
+    LOG_INFO("Allocating frames...");
+    frame_ = av_frame_alloc();
+    rgbFrame_ = av_frame_alloc();
+    
+    if (!frame_ || !rgbFrame_)
+    {
+        LOG_ERROR("Could not allocate frames");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Frames allocated");
+    
+    // Set up RGB frame
+    rgbFrame_->format = AV_PIX_FMT_RGB24;
+    rgbFrame_->width = config_.width;
+    rgbFrame_->height = config_.height;
+    
+    LOG_INFO("Allocating RGB frame buffer...");
+    if (av_frame_get_buffer(rgbFrame_, 0) < 0)
+    {
+        LOG_ERROR("Could not allocate RGB frame buffer");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("RGB frame buffer allocated");
+    
+    // Set up scaler
+    LOG_INFO("Initializing scaler...");
+    swsContext_ = sws_getContext(
+        codecContext_->width, codecContext_->height, codecContext_->pix_fmt,
+        config_.width, config_.height, AV_PIX_FMT_RGB24,
+        SWS_BILINEAR, nullptr, nullptr, nullptr
+    );
+    
+    if (!swsContext_)
+    {
+        LOG_ERROR("Could not initialize scaler");
+        cleanupFFmpeg();
+        return false;
+    }
+    LOG_INFO("Scaler initialized");
+    
+    ffmpegInitialized_ = true;
+    
+    LOG_INFO("FFmpeg video loaded successfully: {} ({}x{} @ {}fps, duration: {}ms)", 
+             config_.sourcePath, config_.width, config_.height, config_.frameRate, fileDuration_);
+    
+    return true;
+}
+
+bool FileCapture::convertFrameToRGB()
+{
+    if (!frame_ || !rgbFrame_ || !swsContext_)
+    {
+        return false;
+    }
+    
+    // Scale and convert to RGB
+    sws_scale(swsContext_,
+              frame_->data, frame_->linesize, 0, frame_->height,
+              rgbFrame_->data, rgbFrame_->linesize);
+    
+    return true;
+}
+
+void FileCapture::cleanupFFmpeg()
+{
+    if (swsContext_)
+    {
+        sws_freeContext(swsContext_);
+        swsContext_ = nullptr;
+    }
+    
+    if (rgbFrame_)
+    {
+        av_frame_free(&rgbFrame_);
+        rgbFrame_ = nullptr;
+    }
+    
+    if (frame_)
+    {
+        av_frame_free(&frame_);
+        frame_ = nullptr;
+    }
+    
+    if (codecContext_)
+    {
+        avcodec_free_context(&codecContext_);
+        codecContext_ = nullptr;
+    }
+    
+    if (formatContext_)
+    {
+        avformat_close_input(&formatContext_);
+        formatContext_ = nullptr;
+    }
+    
+    ffmpegInitialized_ = false;
+    
+    LOG_INFO("FFmpeg resources cleaned up");
+}
+#endif
 
 } // namespace embed::bmcweb::streaming

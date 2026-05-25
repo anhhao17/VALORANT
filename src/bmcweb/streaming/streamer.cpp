@@ -49,9 +49,17 @@ bool VideoStreamer::addStream(const StreamConfig& config)
         return false;
     }
     
+    // Skip file validation for lazy initialization - will be checked when stream starts
+    /*
     // Validate source file exists for MP4
     if (config.type == StreamSourceType::MP4_FILE)
     {
+        if (config.sourcePath.empty())
+        {
+            LOG_ERROR("Video file path not specified for MP4 stream");
+            return false;
+        }
+        
         if (!std::filesystem::exists(config.sourcePath))
         {
             LOG_ERROR("MP4 file not found: {}", config.sourcePath);
@@ -61,6 +69,7 @@ bool VideoStreamer::addStream(const StreamConfig& config)
         // Load video data
         loadMp4File(config.id);
     }
+    */
     
     // Create config with defaults for new fields
     StreamConfig fullConfig = config;
@@ -71,71 +80,9 @@ bool VideoStreamer::addStream(const StreamConfig& config)
     streams_[fullConfig.id] = fullConfig;
     streaming_[fullConfig.id] = false;
     
-    // Initialize protocol using ProtocolManager with protocol instance
-    protocolManager_.setProtocol(fullConfig.id, fullConfig.protocol);
-    protocolManager_.createProtocolInstance(fullConfig.id, fullConfig);
+    // Protocol initialization moved to startStreaming() for lazy initialization
     
-    // Create frame source based on stream type
-    FrameSourceType frameSourceType;
-    switch (config.type)
-    {
-        case StreamSourceType::CAMERA_DEVICE:
-            frameSourceType = FrameSourceType::CAMERA_DEVICE;
-            break;
-        case StreamSourceType::MP4_FILE:
-            frameSourceType = FrameSourceType::VIDEO_FILE;
-            break;
-        case StreamSourceType::NETWORK_STREAM:
-            frameSourceType = FrameSourceType::NETWORK_STREAM;
-            break;
-        default:
-            frameSourceType = FrameSourceType::TEST_PATTERN;
-            break;
-    }
-    
-    auto frameSource = FrameSourceFactory::createFrameSource(frameSourceType);
-    if (frameSource)
-    {
-        FrameSourceConfig frameConfig;
-        frameConfig.id = config.id;
-        frameConfig.name = config.name;
-        frameConfig.type = frameSourceType;
-        frameConfig.sourcePath = config.sourcePath;
-        frameConfig.width = 640; // Default width
-        frameConfig.height = 480; // Default height
-        frameConfig.frameRate = 30; // Default frame rate
-        frameConfig.pixelFormat = "RGB24";
-        frameConfig.loop = config.loop;
-        
-        if (frameSource->initialize(frameConfig))
-        {
-            // Set callback to receive frames from frame source
-            frameSource->setFrameCallback([this, id = config.id](const VideoFrame& frame) {
-                this->onFrameReceived(id, frame);
-            });
-            
-            frameSources_[config.id] = std::move(frameSource);
-            LOG_INFO("Frame source created for stream: {}", config.id);
-        }
-        else
-        {
-            LOG_ERROR("Failed to initialize frame source for stream: {}", config.id);
-        }
-    }
-    else
-    {
-        LOG_WARN("Failed to create frame source for stream: {}, using legacy mode", config.id);
-        // Fall back to legacy MP4 file loading
-        if (config.type == StreamSourceType::MP4_FILE)
-        {
-            if (!std::filesystem::exists(config.sourcePath))
-            {
-                LOG_ERROR("MP4 file not found: {}", config.sourcePath);
-                return false;
-            }
-            loadMp4File(config.id);
-        }
-    }
+    // Frame source initialization moved to startStreaming() for lazy initialization
     
     // Initialize statistics
     StreamStatistics stats;
@@ -149,6 +96,42 @@ bool VideoStreamer::addStream(const StreamConfig& config)
     statistics_[fullConfig.id] = stats;
     
     LOG_INFO("Stream added: {} ({})", fullConfig.id, fullConfig.name);
+    return true;
+}
+
+bool VideoStreamer::addStreamMetadata(const StreamConfig& config)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Check if stream already exists
+    if (streams_.find(config.id) != streams_.end())
+    {
+        LOG_WARN("Stream already exists: {}", config.id);
+        return false;
+    }
+    
+    // Create config with defaults for new fields
+    StreamConfig fullConfig = config;
+    if (fullConfig.bufferSize == 0) fullConfig.bufferSize = 1048576; // 1MB default
+    if (fullConfig.segmentDuration == 0) fullConfig.segmentDuration = 10; // 10 seconds default
+    if (fullConfig.port == 0) fullConfig.port = 8554; // Default RTSP port
+    
+    // Only add metadata - don't initialize frame source or protocol (lazy initialization)
+    streams_[fullConfig.id] = fullConfig;
+    streaming_[fullConfig.id] = false;
+    
+    // Initialize statistics
+    StreamStatistics stats;
+    stats.bytesServed = 0;
+    stats.framesServed = 0;
+    stats.clientConnections = 0;
+    stats.startTime = 0;
+    stats.lastFrameTime = 0;
+    stats.averageBitrate = 0.0;
+    stats.currentViewers = 0;
+    statistics_[fullConfig.id] = stats;
+    
+    LOG_INFO("Stream metadata added: {} ({}) - lazy initialization", fullConfig.id, fullConfig.name);
     return true;
 }
 
@@ -302,12 +285,24 @@ bool VideoStreamer::startStreaming(const std::string& id)
         return false;
     }
     
-    // Check if there are clients requesting this stream (on-demand)
-    if (!sessionManager_.hasActiveClients(id))
+    // Validate source file exists for MP4 before starting
+    if (it->second.type == StreamSourceType::MP4_FILE)
     {
-        LOG_WARN("No clients for stream {}, not starting (on-demand mode)", id);
-        return false;
+        if (it->second.sourcePath.empty())
+        {
+            LOG_ERROR("Video file path not specified for MP4 stream: {}", id);
+            return false;
+        }
+        
+        if (!std::filesystem::exists(it->second.sourcePath))
+        {
+            LOG_ERROR("MP4 file not found: {} for stream: {}", it->second.sourcePath, id);
+            return false;
+        }
     }
+    
+    // Removed client check for server-side configuration mode
+    // Streams can start even without active clients
     
     streaming_[id] = true;
     
@@ -316,21 +311,112 @@ bool VideoStreamer::startStreaming(const std::string& id)
         std::chrono::system_clock::now().time_since_epoch()).count();
     statistics_[id].startTime = now;
     
-    // Start frame source capture if available
-    auto frameSource = getFrameSource(id);
-    if (frameSource)
-    {
-        frameSource->startCapture();
-        LOG_INFO("Frame source started for stream: {}", id);
-    }
-    else
-    {
-        // Fall back to legacy streaming thread
-        streamThreads_[id] = std::thread(&VideoStreamer::streamThread, this, id);
-    }
+    LOG_INFO("Starting stream: {}", id);
     
-    LOG_INFO("Stream started: {} (protocol: {}, clients: {})", 
-             id, static_cast<int>(protocolManager_.getProtocol(id)), sessionManager_.getClientCount(id));
+    // Capture stream config by value for thread safety
+    StreamConfig streamConfig = it->second;
+    
+    // Initialize protocol instance and frame source on-demand (lazy initialization) in background thread
+    std::thread initThread([this, id, streamConfig]() {
+        try {
+            LOG_INFO("Background initialization started for stream: {}", id);
+            
+            // Initialize protocol
+            protocolManager_.setProtocol(id, streamConfig.protocol);
+            protocolManager_.createProtocolInstance(id, streamConfig);
+            
+            LOG_INFO("Protocol initialized for stream: {}", id);
+            
+            LOG_INFO("Initializing frame source for stream: {}", id);
+            
+            // Determine frame source type
+            FrameSourceType frameSourceType;
+            switch (streamConfig.type)
+            {
+                case StreamSourceType::CAMERA_DEVICE:
+                    frameSourceType = FrameSourceType::CAMERA_DEVICE;
+                    break;
+                case StreamSourceType::MP4_FILE:
+                    frameSourceType = FrameSourceType::VIDEO_FILE;
+                    break;
+                case StreamSourceType::NETWORK_STREAM:
+                    frameSourceType = FrameSourceType::NETWORK_STREAM;
+                    break;
+                default:
+                    frameSourceType = FrameSourceType::TEST_PATTERN;
+                    break;
+            }
+            
+            // Create frame source
+            auto frameSource = FrameSourceFactory::createFrameSource(frameSourceType);
+            if (!frameSource)
+            {
+                LOG_ERROR("Failed to create frame source for stream: {}", id);
+                std::lock_guard<std::mutex> lock(mutex_);
+                streaming_[id] = false;
+                return;
+            }
+            
+            LOG_INFO("Frame source created for stream: {}", id);
+            
+            // Configure frame source
+            FrameSourceConfig frameConfig;
+            frameConfig.id = streamConfig.id;
+            frameConfig.name = streamConfig.name;
+            frameConfig.type = frameSourceType;
+            frameConfig.sourcePath = streamConfig.sourcePath;
+            frameConfig.width = 640; // Default width
+            frameConfig.height = 480; // Default height
+            frameConfig.frameRate = 30; // Default frame rate
+            frameConfig.pixelFormat = "RGB24";
+            frameConfig.loop = streamConfig.loop;
+            
+            // Initialize frame source (this may block on FFmpeg operations)
+            LOG_INFO("Calling frame source initialize for stream: {}", id);
+            if (!frameSource->initialize(frameConfig))
+            {
+                LOG_ERROR("Failed to initialize frame source for stream: {}", id);
+                std::lock_guard<std::mutex> lock(mutex_);
+                streaming_[id] = false;
+                return;
+            }
+            
+            LOG_INFO("Frame source initialize completed for stream: {}", id);
+            
+            // Set callback to receive frames from frame source
+            frameSource->setFrameCallback([this, id = streamConfig.id](const VideoFrame& frame) {
+                this->onFrameReceived(id, frame);
+            });
+            
+            // Store frame source and start capture
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                frameSources_[streamConfig.id] = std::move(frameSource);
+            }
+            
+            LOG_INFO("Frame source stored for stream: {}", id);
+            
+            // Start frame source capture
+            auto fs = getFrameSource(id);
+            if (fs)
+            {
+                fs->startCapture();
+                LOG_INFO("Frame source started for stream: {}", id);
+            }
+            
+            LOG_INFO("Background initialization completed for stream: {}", id);
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("Exception during background initialization for stream {}: {}", id, e.what());
+            std::lock_guard<std::mutex> lock(mutex_);
+            streaming_[id] = false;
+        }
+    });
+    
+    initThread.detach();
+    
+    LOG_INFO("Stream start initiated: {} (initialization in background)", id);
     return true;
 }
 
@@ -1004,6 +1090,75 @@ bool VideoStreamer::removeFrameSource(const std::string& id)
     }
     
     return false;
+}
+
+bool VideoStreamer::initializeFrameSourceForStream(const std::string& id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = streams_.find(id);
+    if (it == streams_.end())
+    {
+        LOG_ERROR("Stream not found for frame source initialization: {}", id);
+        return false;
+    }
+    
+    const auto& config = it->second;
+    
+    // Determine frame source type
+    FrameSourceType frameSourceType;
+    switch (config.type)
+    {
+        case StreamSourceType::CAMERA_DEVICE:
+            frameSourceType = FrameSourceType::CAMERA_DEVICE;
+            break;
+        case StreamSourceType::MP4_FILE:
+            frameSourceType = FrameSourceType::VIDEO_FILE;
+            break;
+        case StreamSourceType::NETWORK_STREAM:
+            frameSourceType = FrameSourceType::NETWORK_STREAM;
+            break;
+        default:
+            frameSourceType = FrameSourceType::TEST_PATTERN;
+            break;
+    }
+    
+    // Create frame source
+    auto frameSource = FrameSourceFactory::createFrameSource(frameSourceType);
+    if (!frameSource)
+    {
+        LOG_ERROR("Failed to create frame source for stream: {}", id);
+        return false;
+    }
+    
+    // Configure frame source
+    FrameSourceConfig frameConfig;
+    frameConfig.id = config.id;
+    frameConfig.name = config.name;
+    frameConfig.type = frameSourceType;
+    frameConfig.sourcePath = config.sourcePath;
+    frameConfig.width = 640; // Default width
+    frameConfig.height = 480; // Default height
+    frameConfig.frameRate = 30; // Default frame rate
+    frameConfig.pixelFormat = "RGB24";
+    frameConfig.loop = config.loop;
+    
+    // Initialize frame source
+    if (!frameSource->initialize(frameConfig))
+    {
+        LOG_ERROR("Failed to initialize frame source for stream: {}", id);
+        return false;
+    }
+    
+    // Set callback to receive frames from frame source
+    frameSource->setFrameCallback([this, id = config.id](const VideoFrame& frame) {
+        this->onFrameReceived(id, frame);
+    });
+    
+    frameSources_[config.id] = std::move(frameSource);
+    LOG_INFO("Frame source initialized for stream: {}", id);
+    
+    return true;
 }
 
 // Frame callback handler
