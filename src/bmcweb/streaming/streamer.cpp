@@ -71,8 +71,9 @@ bool VideoStreamer::addStream(const StreamConfig& config)
     streams_[fullConfig.id] = fullConfig;
     streaming_[fullConfig.id] = false;
     
-    // Initialize protocol using ProtocolManager
+    // Initialize protocol using ProtocolManager with protocol instance
     protocolManager_.setProtocol(fullConfig.id, fullConfig.protocol);
+    protocolManager_.createProtocolInstance(fullConfig.id, fullConfig);
     
     // Initialize statistics
     StreamStatistics stats;
